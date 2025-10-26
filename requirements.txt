@@ -1,0 +1,17 @@
+httpx>=0.27
+beautifulsoup4>=4.12
+lxml>=5.0
+parsel>=1.9
+selectolax>=0.3
+extruct>=0.16
+dateparser>=1.2
+pydantic>=2.7
+tenacity>=9.0
+robotexclusionrulesparser>=1.7.1
+w3lib>=2.2
+python-dotenv>=1.0
+pytest>=8.0
+vcrpy>=6.0
+structlog>=24.1
+prefect>=3.0
+playwright>=1.48
