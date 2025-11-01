@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "xhr",
+    "url": "/home/ajax/airportLookup?searchText=JFK&onlyAirportsIfNotNull=false",
+    "method": "GET",
+    "body": ""
+  }
+]

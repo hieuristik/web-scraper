@@ -1,0 +1,2 @@
+status=404
+{"timestamp":"2025-10-31T14:17:23.933+00:00","path":"/booking/api/search","status":404,"error":"Not Found","requestId":"5527ce65-27408679"}

@@ -1,0 +1,11 @@
+{
+  "search_metadata": {
+    "origin": "LAX",
+    "destination": "JFK",
+    "date": "2025-12-15",
+    "passengers": 1,
+    "cabin_class": "economy"
+  },
+  "flights": [],
+  "total_results": 0
+}
