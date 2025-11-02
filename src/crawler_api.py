@@ -1,408 +1,540 @@
-import os, re, json, asyncio, pathlib, sys, base64
-from typing import Any, Dict, Optional, List, Callable
+# src/crawler_api.py
+import os, re, json, time, sys, pathlib, types, subprocess
+from typing import Any, Dict, List, Optional
 
-from playwright.async_api import (
-    async_playwright,
-    Page,
-    BrowserContext,
-    TimeoutError as PWTimeout,
-)
+OUT = pathlib.Path("data/debug")
+OUT.mkdir(parents=True, exist_ok=True)
 
-# -------- settings / env -------
-OUT = pathlib.Path("data/debug"); OUT.mkdir(parents=True, exist_ok=True)
-PROFILE_DIR = os.getenv("AA_PROFILE_DIR", ".pw-user")
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-ACCEPT_LANG = "en-US,en;q=0.9"
-TZ = "America/Los_Angeles"
+def _dump(x, name):
+    try: 
+        (OUT/f"{name}.json").write_text(json.dumps(x, indent=2, ensure_ascii=False), encoding="utf-8")
+    except: 
+        pass
 
-def proxy_from_env():
-    p = os.getenv("AA_HTTP_PROXY") or os.getenv("HTTP_PROXY")
-    return {"server": p} if p else None
+def _save_html(driver, name):
+    try: 
+        (OUT/f"{name}.html").write_text(driver.page_source, encoding="utf-8")
+    except: 
+        pass
 
-# --- JS hooks to capture API calls ---
-INJECT_HOOKS = r"""
-(() => {
-  const tag = (kind, url, body) => {
-    try {
-      const b64 = body ? btoa(unescape(encodeURIComponent(body))) : '';
-      console.debug('AA_HOOK|' + kind + '|' + url + '|' + b64);
-    } catch(e) {}
-  };
+# ---- Py3.12 distutils shim ----
+try: 
+    import distutils
+except ModuleNotFoundError:
+    from packaging.version import parse as _parse
+    M = types.ModuleType("distutils")
+    Vm = types.ModuleType("distutils.version")
+    class LooseVersion:
+        def __init__(s,v): s.v=_parse(str(v))
+        def _cmp(s,o,op): ov=o.v if isinstance(o,LooseVersion) else _parse(str(o)); return op(s.v, ov)
+        def __lt__(s,o): return s._cmp(o, lambda a,b:a<b)
+        def __le__(s,o): return s._cmp(o, lambda a,b:a<=b)
+        def __gt__(s,o): return s._cmp(o, lambda a,b:a>b)
+        def __ge__(s,o): return s._cmp(o, lambda a,b:a>=b)
+        def __eq__(s,o): return s._cmp(o, lambda a,b:a==b)
+        def __ne__(s,o): return s._cmp(o, lambda a,b:a!=b)
+    Vm.LooseVersion = LooseVersion
+    sys.modules["distutils"]=M
+    sys.modules["distutils.version"]=Vm
 
-  const origFetch = window.fetch;
-  window.fetch = async function(input, init={}) {
-    try {
-      const url = (typeof input === 'string') ? input : (input?.url || '');
-      const method = (init?.method || 'GET').toUpperCase();
-      let body = '';
-      if (typeof init?.body === 'string') body = init.body;
-      else if (init?.body instanceof URLSearchParams) body = init.body.toString();
-      if (method === 'POST') tag('fetch', url, body || '');
-    } catch(e) {}
-    return origFetch.apply(this, arguments);
-  };
+# ---- deps ----
+try: 
+    import undetected_chromedriver as uc
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.common.keys import Keys
+    from selenium.common.exceptions import TimeoutException
+except Exception as e: 
+    raise RuntimeError(f"Missing selenium: {e}")
 
-  const origOpen = XMLHttpRequest.prototype.open;
-  const origSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    this.__aa_url = url; this.__aa_method = method;
-    return origOpen.apply(this, arguments);
-  };
-  XMLHttpRequest.prototype.send = function(body) {
-    try {
-      if ((this.__aa_method||'').toUpperCase() === 'POST') {
-        let b = '';
-        if (typeof body === 'string') b = body;
-        else if (body instanceof URLSearchParams) b = body.toString();
-        tag('xhr', this.__aa_url||'', b || '');
-      }
-    } catch(e) {}
-    return origSend.apply(this, arguments);
-  };
-})();
-"""
-
-# -------- helpers --------------
-def _dump(obj, name):
-    try: (OUT / f"{name}.json").write_text(json.dumps(obj, indent=2), encoding="utf-8")
-    except Exception: pass
-
-def looks_like_flights(js):
-    if not isinstance(js, dict): return False
-    text = json.dumps(js).lower()
-    return any(h in text for h in ["offer", "itineraries", "slices", "segments", "fares"])
-
-def build_headers():
-    return {
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json;charset=UTF-8",
-        "Origin": "https://www.aa.com",
-        "Referer": "https://www.aa.com/",
-    }
-
-def mmddyyyy(date_iso):
+def mmddyyyy(date_iso: str) -> str:
     y, m, d = date_iso.split("-")
     return f"{int(m):02d}/{int(d):02d}/{y}"
 
-def _console_scrape(text, bucket):
-    if not isinstance(text, str) or not text.startswith("AA_HOOK|"): return
-    try:
-        _, kind, url, b64 = text.split("|", 3)
-        body = base64.b64decode(b64).decode("utf-8", "ignore") if b64 else ""
-        bucket.append({"url": url, "body": body, "source": f"console-{kind}"})
-    except: pass
+def calculate_cpp(cash: float, taxes: float, points: int) -> float:
+    return 0.0 if not points else round(((cash - taxes)/points)*100, 2)
 
-def _looks_like_shopping(url, headers):
-    u = (url or "").lower()
-    return "aa.com" in u and any(s in u for s in ["/booking/api", "/shopping", "/bff/"])
-
-# -------- wait helpers ----------
-async def wait_not_busy(page, timeout = 4000):
-    try:
-        await page.wait_for_function("""() => {
-            const busy = document.querySelector('.aa-busy-module, .aa-busy-bg, [class*="spinner"], [class*="loading"]');
-            return !busy || getComputedStyle(busy).opacity === '0';
-        }""", timeout=timeout)
-    except:
-        await asyncio.sleep(0.3)
-
-async def safe_click(loc, page):
-    await wait_not_busy(page)
-    try:
-        await loc.wait_for(state="visible", timeout=5000)
-        await loc.scroll_into_view_if_needed()
-        await asyncio.sleep(0.1)
-        await loc.click(timeout=3000)
-    except:
-        try:
-            await asyncio.sleep(0.3)
-            await loc.click(force=True, timeout=2000)
-        except:
-            await page.evaluate("el => el.click()", await loc.element_handle())
-
-# -------- launch -----
-async def launch_context():
-    p = await async_playwright().start()
-    ctx = await p.chromium.launch_persistent_context(
-        PROFILE_DIR,
-        channel="chrome",
-        headless=False,
-        viewport={"width": 1366, "height": 900},
-        user_agent=UA,
-        locale=ACCEPT_LANG,
-        timezone_id=TZ,
-        proxy=proxy_from_env(),
-        args=["--disable-blink-features=AutomationControlled"],
-    )
-    await ctx.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
-    return p, ctx
-
-# -------- step 0: load home ---
-async def seed_home(ctx):
-    page = await ctx.new_page()
-    await page.add_init_script(INJECT_HOOKS)
-    print("🌐 Loading AA.com...")
-    await page.goto("https://www.aa.com/", wait_until="domcontentloaded")
-    await asyncio.sleep(2)
+def merge_and_dedup(cash: List[Dict], award: List[Dict]) -> List[Dict]:
+    """Match cash and award flights by flight number and departure time"""
+    merged = []
+    used_award = set()
     
-    # Close popups
-    for sel in ["button:has-text('Accept')", "button:has-text('Close')", "button[aria-label*='close' i]"]:
-        try:
-            await page.locator(sel).first.click(timeout=1000)
-        except: pass
-    
-    try:
-        await page.screenshot(path=str(OUT / "home.png"))
-        (OUT / "home.html").write_text(await page.content(), encoding="utf-8")
-        print("✓ Homepage loaded")
-    except: pass
-    return page
-
-# -------- strategy A: direct API ----------
-async def try_direct_api(ctx, params):
-    print("\n🔬 Trying direct API...")
-    o, d, dt = params["origin"], params["destination"], params["date"]
-    
-    urls = [
-        "https://www.aa.com/booking/api/search",
-        "https://www.aa.com/booking/api/1/shopping/flightSearch"
-    ]
-    
-    for url in urls:
-        for mode in ("cash", "award"):
-            body = {
-                "tripType": "ONE_WAY",
-                "redeemMiles": (mode == "award"),
-                "slices": [{"origin": o, "destination": d, "date": dt}],
-                "passengers": {"adult": 1},
-            }
-            try:
-                r = await ctx.request.post(url, headers=build_headers(), data=json.dumps(body))
-                if r.ok:
-                    js = await r.json()
-                    if looks_like_flights(js):
-                        print(f"✅ Direct API worked! ({mode})")
-                        _dump(js, f"direct_{mode}")
-                        return {"mode": mode, "json": js, "url": url}
-            except: pass
-    return None
-
-# -------- strategy B: form interaction ----------
-async def setup_oneway(page):
-    print("📍 Setting one-way...")
-    # Try radio button
-    for radio_id in ["flightSearchForm.tripType.oneWay", "flightSearchForm.tripType.OneWay"]:
-        try:
-            radio = page.locator(f"input[id*='{radio_id}' i]").first
-            if await radio.count():
-                await safe_click(radio, page)
-                await asyncio.sleep(0.2)
-                return
-        except: pass
-    
-    # Try label
-    try:
-        await safe_click(page.get_by_text("One way", exact=False).first, page)
-        await asyncio.sleep(0.2)
-    except: pass
-
-async def fill_airport(page, field_name, code):
-    print(f"✍ {field_name}: {code}")
-    
-    # Find input
-    inp = None
-    for sel in [f"input[name='{field_name}']", f"input[placeholder*='{field_name.split('Airport')[0]}' i]"]:
-        try:
-            loc = page.locator(sel).first
-            if await loc.count():
-                inp = loc
+    for c in cash:
+        best_match = None
+        best_idx = None
+        
+        for idx, a in enumerate(award):
+            if idx in used_award:
+                continue
+            
+            if (c.get("flight_number") == a.get("flight_number") and 
+                c.get("departure_time") == a.get("departure_time")):
+                best_match = a
+                best_idx = idx
                 break
-        except: continue
+        
+        if best_match:
+            item = {
+                "flight_number": c["flight_number"],
+                "departure_time": c["departure_time"],
+                "arrival_time": c["arrival_time"],
+                "cash_price_usd": float(c["cash_price_usd"]),
+                "taxes_fees_usd": float(c.get("taxes_fees_usd", 5.60)),
+                "points_required": int(best_match["points_required"]),
+            }
+            item["cpp"] = calculate_cpp(
+                item["cash_price_usd"],
+                item["taxes_fees_usd"],
+                item["points_required"]
+            )
+            merged.append(item)
+            used_award.add(best_idx)
     
-    if not inp:
-        print(f"⚠ Field not found: {field_name}")
-        return
+    # Deduplicate
+    seen = set()
+    unique = []
+    for m in merged:
+        key = (m["flight_number"], m["departure_time"], m["cash_price_usd"], m["points_required"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(m)
     
-    # Clear and type
-    await safe_click(inp, page)
-    await asyncio.sleep(0.2)
-    await inp.fill("")
-    await inp.type(code, delay=50)
-    await asyncio.sleep(0.6)
-    
-    # Select from autocomplete
-    try:
-        await page.get_by_role("option", name=re.compile(rf"\b{re.escape(code)}\b", re.I)).first.click(timeout=1500)
-        print(f"✓ Selected {code}")
-    except:
-        await page.keyboard.press("ArrowDown")
-        await page.keyboard.press("Enter")
+    return unique
 
-async def fill_date(page, date_iso):
-    val = mmddyyyy(date_iso)
-    print(f"📅 Date: {val}")
+class AAScraper:
+    def __init__(self):
+        self.driver = None
     
-    # JS set
-    await page.evaluate("""
-    (val) => {
-      document.querySelectorAll("input[name*='depart' i], input[placeholder*='date' i]").forEach(inp => {
-        inp.value = val;
-        ['input','change'].forEach(t => inp.dispatchEvent(new Event(t, {bubbles:true})));
-      });
-    }""", val)
-
-async def discover_via_form(page, params):
-    ctx = page.context
-    candidates: List[dict] = []
-    
-    def on_req(req):
+    def setup(self):
+        print("🚀 Launching Chrome...")
+        opts = uc.ChromeOptions()
+        opts.add_argument('--disable-blink-features=AutomationControlled')
+        opts.add_argument('--no-sandbox')
+        opts.add_argument('--disable-dev-shm-usage')
+        opts.add_argument("--window-size=1400,1000")
+        
         try:
-            if req.method.upper() == "POST" and _looks_like_shopping(req.url, req.headers):
-                candidates.append({"url": req.url, "body": req.post_data or ""})
-        except: pass
-    ctx.on("request", on_req)
-    page.on("console", lambda msg: _console_scrape(msg.text, candidates))
+            self.driver = uc.Chrome(options=opts)
+            print("✓ Chrome ready")
+        except Exception as e:
+            raise RuntimeError(f"Failed to start Chrome: {e}")
     
-    print("\n📝 Filling form...")
-    await setup_oneway(page)
-    await fill_airport(page, "originAirport", params["origin"])
-    await fill_airport(page, "destinationAirport", params["destination"])
-    await fill_date(page, params["date"])
-    await asyncio.sleep(0.3)
-    
-    # Submit
-    print("🚀 Submitting...")
-    await page.evaluate("""
-      () => {
-        const form = document.querySelector('form');
-        if (form) {
-          form.setAttribute('action', 'https://www.aa.com/booking/find-flights');
-          form.submit();
-        }
-      }
-    """)
-    
-    try:
-        await page.wait_for_load_state("networkidle", timeout=10000)
-    except:
-        await asyncio.sleep(5)
-    
-    if not candidates:
-        raise RuntimeError("No API calls captured")
-    
-    # Pick best
-    def score(c):
-        s = 0
-        if "/booking/api/" in c["url"]: s += 2
-        if c.get("body"): s += 1
-        return -s
-    
-    candidates.sort(key=score)
-    best = candidates[0]
-    print(f"✓ Captured {len(candidates)} calls, using: {best['url'][:60]}...")
-    
-    for i, c in enumerate(candidates[:3]):
-        (OUT / f"req_{i}.txt").write_text(f"{c['url']}\n\n{c.get('body','')}", encoding="utf-8")
-    
-    return best
-
-# -------- master function ----
-async def fetch_shopping_json(params):
-    p, ctx = await launch_context()
-    try:
-        page = await seed_home(ctx)
-        
-        # Try direct first
-        direct = await try_direct_api(ctx, params)
-        if direct:
-            return {"template": None, "result": direct}
-        
-        # Fall back to form
-        template = await discover_via_form(page, params)
-        
-        # Replay with real params
-        print("\n🔄 Replaying API call...")
+    def _dismiss_popups(self):
+        """Close cookie banners"""
         try:
-            body_obj = json.loads(template["body"]) if template["body"] else {}
-            # Patch body (simplified)
-            if "slices" in body_obj and body_obj["slices"]:
-                body_obj["slices"][0].update({
-                    "origin": params["origin"],
-                    "destination": params["destination"],
-                    "date": params["date"]
-                })
+            self.driver.execute_script("""
+                document.querySelectorAll('#onetrust-accept-btn-handler, button[aria-label*="close" i]').forEach(el => {
+                    try { el.click(); } catch(e) {}
+                });
+            """)
+            time.sleep(0.5)
         except:
-            body_obj = {}
+            pass
+    
+    def open_home(self):
+        print("🌐 Loading AA.com...")
+        self.driver.get("https://www.aa.com/")
+        time.sleep(4)
+        self._dismiss_popups()
+        _save_html(self.driver, "home")
+        print("✓ Homepage loaded")
+    
+    def fill_search_form(self, origin: str, dest: str, date: str, redeem_miles: bool):
+        """Fill the search form with exact selectors"""
+        print(f"📝 Filling form ({'Award' if redeem_miles else 'Cash'} mode)...")
         
-        r = await ctx.request.post(template["url"], 
-                                   headers=build_headers(), 
-                                   data=json.dumps(body_obj))
+        # Click one-way radio - click the LABEL, not the input
+        try:
+            # Try clicking the label first (most reliable)
+            oneway_label = self.driver.find_element(By.CSS_SELECTOR, "label[for='flightSearchForm.tripType.oneWay']")
+            oneway_label.click()
+            time.sleep(0.3)
+            print("✓ One-way selected (via label)")
+        except Exception as e1:
+            # Fallback: try the input element
+            try:
+                oneway = self.driver.find_element(By.ID, "flightSearchForm.tripType.oneWay")
+                if not oneway.is_selected():
+                    # Use JavaScript click as fallback
+                    self.driver.execute_script("arguments[0].click();", oneway)
+                    time.sleep(0.3)
+                print("✓ One-way selected (via JS)")
+            except Exception as e2:
+                print(f"  ⚠ One-way selection failed: {e1}, {e2}")
         
-        if not r.ok:
-            raise RuntimeError(f"Replay failed: {r.status}")
+        # Toggle redeem miles checkbox if needed
+        if redeem_miles:
+            try:
+                checkbox = self.driver.find_element(By.ID, "flightSearchForm.tripType.redeemMiles")
+                if not checkbox.is_selected():
+                    # Click the label for checkbox too
+                    try:
+                        checkbox_label = self.driver.find_element(By.CSS_SELECTOR, "label[for='flightSearchForm.tripType.redeemMiles']")
+                        checkbox_label.click()
+                    except:
+                        checkbox.click()
+                    time.sleep(0.3)
+                print("✓ Redeem miles enabled")
+            except Exception as e:
+                print(f"  ⚠ Redeem miles failed: {e}")
+        else:
+            # Make sure it's unchecked for cash search
+            try:
+                checkbox = self.driver.find_element(By.ID, "flightSearchForm.tripType.redeemMiles")
+                if checkbox.is_selected():
+                    try:
+                        checkbox_label = self.driver.find_element(By.CSS_SELECTOR, "label[for='flightSearchForm.tripType.redeemMiles']")
+                        checkbox_label.click()
+                    except:
+                        checkbox.click()
+                    time.sleep(0.3)
+                print("✓ Redeem miles disabled")
+            except:
+                pass
         
-        js = await r.json()
-        if not looks_like_flights(js):
-            _dump(js, "replay_bad")
-            raise RuntimeError("Replay didn't return flights")
+        self._dismiss_popups()
         
-        _dump(js, "replay_success")
-        print("✅ Replay successful!")
+        # Fill origin
+        try:
+            origin_input = self.driver.find_element(By.NAME, "originAirport")
+            origin_input.clear()
+            time.sleep(0.2)
+            for char in origin:
+                origin_input.send_keys(char)
+                time.sleep(0.05)
+            time.sleep(1)
+            origin_input.send_keys(Keys.TAB)
+            time.sleep(0.5)
+            print(f"✓ Origin: {origin}")
+        except Exception as e:
+            print(f"  ⚠ Origin input failed: {e}")
         
-        return {
-            "template": {"url": template["url"], "body": body_obj},
-            "result": {"json": js, "url": template["url"]}
+        # Fill destination
+        try:
+            dest_input = self.driver.find_element(By.NAME, "destinationAirport")
+            dest_input.clear()
+            time.sleep(0.2)
+            for char in dest:
+                dest_input.send_keys(char)
+                time.sleep(0.05)
+            time.sleep(1)
+            dest_input.send_keys(Keys.TAB)
+            time.sleep(0.5)
+            print(f"✓ Destination: {dest}")
+        except Exception as e:
+            print(f"  ⚠ Destination input failed: {e}")
+        
+        # Fill date
+        try:
+            date_val = mmddyyyy(date)
+            self.driver.execute_script(f"""
+                const inputs = document.querySelectorAll("input[name*='depart' i]");
+                inputs.forEach(inp => {{
+                    inp.value = '{date_val}';
+                    inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+                }});
+            """)
+            time.sleep(0.5)
+            print(f"✓ Date: {date_val}")
+        except Exception as e:
+            print(f"  ⚠ Date input failed: {e}")
+    
+    def submit_search(self):
+        """Submit the search"""
+        self._dismiss_popups()
+        
+        try:
+            # Find search button
+            search_btn = self.driver.find_element(By.XPATH, "//button[contains(., 'Search') or @type='submit']")
+            search_btn.click()
+            print("✓ Search submitted")
+        except:
+            # Fallback: Enter key on destination
+            try:
+                dest = self.driver.find_element(By.NAME, "destinationAirport")
+                dest.send_keys(Keys.ENTER)
+                print("↩ Search submitted (Enter key)")
+            except Exception as e:
+                print(f"  ⚠ Submit failed: {e}")
+        
+        time.sleep(2)
+    
+    def wait_for_results(self, timeout=90):
+        """Wait for app-slice-details elements to appear"""
+        print("⏳ Waiting for results...")
+        
+        for i in range(timeout):
+            self._dismiss_popups()
+            
+            try:
+                count = self.driver.execute_script("""
+                    return document.querySelectorAll('app-slice-details').length;
+                """)
+                
+                if count >= 10:
+                    print(f"✓ Found {count} flight elements after {i+1}s")
+                    time.sleep(3)  # Extra wait for prices to stabilize
+                    return True
+            except:
+                pass
+            
+            time.sleep(1)
+        
+        print("⚠ Timeout waiting for results")
+        return False
+    
+    def parse_flights(self, is_award: bool) -> List[Dict]:
+        """Parse flights using app-slice-details selector"""
+        print(f"📊 Parsing {'award' if is_award else 'cash'} flights...")
+        
+        _save_html(self.driver, f"{'award' if is_award else 'cash'}_results")
+        
+        # JavaScript to extract flight data
+        js_code = """
+        const slices = document.querySelectorAll('app-slice-details');
+        const results = [];
+        
+        for (let slice of slices) {
+            try {
+                const text = slice.innerText || '';
+                
+                // Extract times
+                const times = text.match(/(\\d{1,2}:\\d{2}\\s*(?:AM|PM))/gi);
+                if (!times || times.length < 2) continue;
+                
+                const depTime = times[0];
+                const arrTime = times[1];
+                
+                // Extract flight number
+                const flightMatch = text.match(/\\b([A-Z]{2})\\s+(\\d{1,4})\\b/);
+                const flightNo = flightMatch ? flightMatch[1] + flightMatch[2] : '';
+                
+                if (!flightNo) continue;
+                
+                // Walk up DOM to find parent with price/miles
+                let parent = slice.parentElement;
+                let price = null;
+                let miles = null;
+                let attempts = 0;
+                
+                while (parent && attempts < 6) {
+                    const parentText = parent.innerText || '';
+                    
+                    // Extract price
+                    if (!price) {
+                        const priceMatch = parentText.match(/\\$(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)/);
+                        if (priceMatch) {
+                            price = parseFloat(priceMatch[1].replace(/,/g, ''));
+                        }
+                    }
+                    
+                    // Extract miles (12.5K or 12,500 miles)
+                    if (!miles) {
+                        const milesMatch = parentText.match(/(\\d+(?:\\.\\d+)?)K\\b|(\\d{1,3}(?:,\\d{3})+)\\s*(?:mile|point)/i);
+                        if (milesMatch) {
+                            if (milesMatch[1]) {
+                                miles = parseInt(parseFloat(milesMatch[1]) * 1000);
+                            } else if (milesMatch[2]) {
+                                miles = parseInt(milesMatch[2].replace(/,/g, ''));
+                            }
+                        }
+                    }
+                    
+                    if (price !== null || miles !== null) break;
+                    
+                    parent = parent.parentElement;
+                    attempts++;
+                }
+                
+                if (flightNo && depTime && arrTime && (price !== null || miles !== null)) {
+                    results.push({
+                        flight_number: flightNo,
+                        departure_time: depTime,
+                        arrival_time: arrTime,
+                        price: price,
+                        miles: miles
+                    });
+                }
+            } catch (e) {
+                console.error('Parse error:', e);
+            }
         }
         
-    finally:
-        await asyncio.sleep(2)  # Let you see the result
-        try: await ctx.close()
-        except: pass
-        try: await p.stop()
-        except: pass
+        return results;
+        """
+        
+        try:
+            raw = self.driver.execute_script(js_code)
+        except Exception as e:
+            print(f"  ⚠ JS execution error: {e}")
+            raw = []
+        
+        _dump(raw, f"raw_{'award' if is_award else 'cash'}_flights")
+        
+        # Convert to proper format
+        flights = []
+        for f in raw:
+            if is_award and f.get("miles"):
+                flights.append({
+                    "flight_number": f["flight_number"],
+                    "departure_time": f["departure_time"],
+                    "arrival_time": f["arrival_time"],
+                    "points_required": int(f["miles"])
+                })
+            elif not is_award and f.get("price"):
+                flights.append({
+                    "flight_number": f["flight_number"],
+                    "departure_time": f["departure_time"],
+                    "arrival_time": f["arrival_time"],
+                    "cash_price_usd": float(f["price"]),
+                    "taxes_fees_usd": 5.60
+                })
+        
+        # Deduplicate
+        seen = set()
+        unique = []
+        for f in flights:
+            key = (f["flight_number"], f["departure_time"], 
+                   f.get("cash_price_usd"), f.get("points_required"))
+            if key not in seen:
+                seen.add(key)
+                unique.append(f)
+        
+        print(f"  Extracted {len(unique)} flights")
+        _dump(unique, f"parsed_{'award' if is_award else 'cash'}_flights")
+        
+        return unique
+    
+    def search_flights(self, origin: str, dest: str, date: str, redeem_miles: bool) -> List[Dict]:
+        """Complete search flow"""
+        self.fill_search_form(origin, dest, date, redeem_miles)
+        self.submit_search()
+        
+        if not self.wait_for_results():
+            return []
+        
+        return self.parse_flights(is_award=redeem_miles)
+    
+    def close(self):
+        try:
+            time.sleep(2)
+            self.driver.quit()
+        except:
+            pass
 
-# -------- CLI ----------
-def _cli_parse(argv):
+def search(params: Dict[str, Any]) -> Dict[str, Any]:
+    scraper = AAScraper()
+    
+    try:
+        scraper.setup()
+        scraper.open_home()
+        
+        # PASS 1: Cash prices
+        print(f"\n{'='*60}")
+        print("PASS 1: CASH PRICES")
+        print(f"{'='*60}")
+        cash_flights = scraper.search_flights(
+            params["origin"], 
+            params["destination"], 
+            params["date"],
+            redeem_miles=False
+        )
+        
+        # Return home
+        print("\n🏠 Returning home...")
+        scraper.driver.get("https://www.aa.com/")
+        time.sleep(3)
+        scraper._dismiss_popups()
+        
+        # PASS 2: Award prices
+        print(f"\n{'='*60}")
+        print("PASS 2: AWARD PRICES")
+        print(f"{'='*60}")
+        award_flights = scraper.search_flights(
+            params["origin"], 
+            params["destination"], 
+            params["date"],
+            redeem_miles=True
+        )
+        
+        # Merge and calculate CPP
+        merged = merge_and_dedup(cash_flights, award_flights)
+        
+        output = {
+            "search_metadata": {
+                "origin": params["origin"],
+                "destination": params["destination"],
+                "date": params["date"],
+                "passengers": params.get("passengers", 1),
+                "cabin_class": params.get("cabin", "economy"),
+                "source": "app-slice-details",
+                "cash_count": len(cash_flights),
+                "award_count": len(award_flights),
+                "merged_count": len(merged)
+            },
+            "flights": merged,
+            "total_results": len(merged)
+        }
+        
+        # Save output
+        pathlib.Path("output.json").write_text(json.dumps(output, indent=2), encoding="utf-8")
+        
+        print(f"\n{'='*60}")
+        print("✅ SUCCESS")
+        print(f"{'='*60}")
+        print(f"Cash flights:  {len(cash_flights)}")
+        print(f"Award flights: {len(award_flights)}")
+        print(f"Merged:        {len(merged)}")
+        print(f"Output:        output.json")
+        print(f"{'='*60}\n")
+        
+        return output
+        
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+    finally:
+        scraper.close()
+
+def _cli(argv):
     import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--origin", required=True)
-    ap.add_argument("--destination", required=True)
-    ap.add_argument("--date", required=True, help="YYYY-MM-DD")
-    ap.add_argument("--passengers", type=int, default=1)
-    ap.add_argument("--cabin", default="ECONOMY")
+    ap = argparse.ArgumentParser(description="AA Flight Scraper - CPP Calculator")
+    ap.add_argument("--origin", required=True, help="Origin airport code (e.g., LAX)")
+    ap.add_argument("--destination", required=True, help="Destination airport code (e.g., JFK)")
+    ap.add_argument("--date", required=True, help="Date in YYYY-MM-DD format")
+    ap.add_argument("--passengers", type=int, default=1, help="Number of passengers")
+    ap.add_argument("--cabin", default="economy", help="Cabin class")
     args = ap.parse_args(argv)
+    
     return {
         "origin": args.origin.upper(),
         "destination": args.destination.upper(),
         "date": args.date,
         "passengers": args.passengers,
-        "cabin": args.cabin,
+        "cabin": args.cabin.lower()
     }
 
-async def _main(argv):
-    params = _cli_parse(argv)
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    
+    params = _cli(argv)
+    
     print(f"\n{'='*60}")
-    print(f"AA Flight Scraper")
+    print("AA Flight Scraper - CPP Calculator")
     print(f"{params['origin']} → {params['destination']} on {params['date']}")
     print(f"{'='*60}\n")
     
-    res = await fetch_shopping_json(params)
+    result = search(params)
     
-    out = {
-        "search_metadata": {
-            "origin": params["origin"],
-            "destination": params["destination"],
-            "date": params["date"],
-            "passengers": params["passengers"],
-            "cabin_class": params["cabin"].lower(),
-            "source": "aa.com",
-        },
-        "raw": res["result"]["json"],
-        "template_used": res["template"],
-    }
-    
-    (OUT / "crawler_output.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
-    print(f"\n✅ Output: {OUT}/crawler_output.json ({len(json.dumps(out))} bytes)")
+    # Print summary
+    if result["flights"]:
+        print("Sample flights:")
+        for flight in result["flights"][:5]:
+            print(f"  {flight['flight_number']}: ${flight['cash_price_usd']:.2f} or {flight['points_required']:,} pts → CPP: {flight['cpp']}")
 
 if __name__ == "__main__":
-    asyncio.run(_main(sys.argv[1:]))
+    main()
