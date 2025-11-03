@@ -7,9 +7,19 @@
     "cabin_class": "economy",
     "source": "app-slice-details",
     "cash_count": 37,
-    "award_count": 0,
-    "merged_count": 0
+    "award_count": 1,
+    "merged_count": 1
   },
-  "flights": [],
-  "total_results": 0
+  "flights": [
+    {
+      "flight_number": "AA28",
+      "departure_time": "12:15 AM",
+      "arrival_time": "8:29 AM",
+      "cash_price_usd": 209.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 19500,
+      "cpp": 1.04
+    }
+  ],
+  "total_results": 1
 }
