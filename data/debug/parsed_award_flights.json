@@ -3,6 +3,54 @@
     "flight_number": "AA28",
     "departure_time": "12:15 AM",
     "arrival_time": "8:29 AM",
+    "points_required": 18000
+  },
+  {
+    "flight_number": "AA118",
+    "departure_time": "6:05 AM",
+    "arrival_time": "2:10 PM",
+    "points_required": 15000
+  },
+  {
+    "flight_number": "AA2",
+    "departure_time": "7:00 AM",
+    "arrival_time": "3:32 PM",
+    "points_required": 18000
+  },
+  {
+    "flight_number": "AA307",
+    "departure_time": "8:00 AM",
+    "arrival_time": "4:28 PM",
+    "points_required": 27000
+  },
+  {
+    "flight_number": "AA238",
+    "departure_time": "10:15 AM",
+    "arrival_time": "6:42 PM",
+    "points_required": 27500
+  },
+  {
+    "flight_number": "AA32",
+    "departure_time": "11:20 AM",
+    "arrival_time": "7:45 PM",
+    "points_required": 26000
+  },
+  {
+    "flight_number": "AA274",
+    "departure_time": "12:37 PM",
+    "arrival_time": "9:00 PM",
+    "points_required": 27500
+  },
+  {
+    "flight_number": "AA4",
+    "departure_time": "3:40 PM",
+    "arrival_time": "11:49 PM",
+    "points_required": 15000
+  },
+  {
+    "flight_number": "AA10",
+    "departure_time": "9:45 PM",
+    "arrival_time": "6:00 AM",
     "points_required": 19500
   }
 ]
