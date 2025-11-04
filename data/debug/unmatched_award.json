@@ -1,0 +1,121 @@
+[
+  {
+    "flight_number": "AA2129",
+    "departure_time": "6:00 AM",
+    "arrival_time": "7:29 PM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AA2808",
+    "departure_time": "6:06 AM",
+    "arrival_time": "8:29 PM",
+    "points_required": 15000,
+    "taxes_fees_usd": 11.2
+  },
+  {
+    "flight_number": "AA2050",
+    "departure_time": "7:00 AM",
+    "arrival_time": "7:29 PM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AA2050",
+    "departure_time": "7:00 AM",
+    "arrival_time": "9:05 PM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AA2746",
+    "departure_time": "7:00 AM",
+    "arrival_time": "9:30 PM",
+    "points_required": 15000,
+    "taxes_fees_usd": 11.2
+  },
+  {
+    "flight_number": "AA6324",
+    "departure_time": "1:29 PM",
+    "arrival_time": "7:00 AM",
+    "points_required": 21000,
+    "taxes_fees_usd": 11.2
+  },
+  {
+    "flight_number": "AA382",
+    "departure_time": "1:50 PM",
+    "arrival_time": "7:29 AM",
+    "points_required": 19500,
+    "taxes_fees_usd": 11.2
+  },
+  {
+    "flight_number": "AS3433",
+    "departure_time": "3:59 PM",
+    "arrival_time": "7:00 AM",
+    "points_required": 12500,
+    "taxes_fees_usd": 11.2
+  },
+  {
+    "flight_number": "AS2477",
+    "departure_time": "5:26 PM",
+    "arrival_time": "7:00 AM",
+    "points_required": 12500,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AS2150",
+    "departure_time": "6:49 PM",
+    "arrival_time": "7:00 AM",
+    "points_required": 12500,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AS2482",
+    "departure_time": "8:18 PM",
+    "arrival_time": "7:00 AM",
+    "points_required": 12500,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AS2482",
+    "departure_time": "8:18 PM",
+    "arrival_time": "7:30 AM",
+    "points_required": 32000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AA1729",
+    "departure_time": "9:30 PM",
+    "arrival_time": "10:30 AM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AA1729",
+    "departure_time": "9:30 PM",
+    "arrival_time": "11:35 AM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AS3461",
+    "departure_time": "10:27 PM",
+    "arrival_time": "3:54 PM",
+    "points_required": 12500,
+    "taxes_fees_usd": 11.2
+  },
+  {
+    "flight_number": "AA2729",
+    "departure_time": "10:59 PM",
+    "arrival_time": "10:30 AM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  },
+  {
+    "flight_number": "AA2729",
+    "departure_time": "10:59 PM",
+    "arrival_time": "11:35 AM",
+    "points_required": 15000,
+    "taxes_fees_usd": 5.6
+  }
+]

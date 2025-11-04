@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # src/crawler_api.py
-# Improved, robust AA scraper:
-# - Broader result-detection (both modern app-slice-details and legacy containers)
-# - Fallback extraction using text-fragment parsing (handles structural differences between cash & award pages)
-# - Aggressive lazy-load coaxing (scrolling, clicking "show more", human-like small delays)
-# - Better award-pass handling so it won't stall indefinitely and will retry with extra interactions
-#
-# Usage same as before:
-# python -m src.crawler_api --origin LAX --destination JFK --date 2025-12-15
+# Improved AA scraper with better handling for:
+# - Multi-leg flights (using first leg's departure, last leg's arrival)
+# - Award page button-wrapped data
+# - Precise deduplication
+# - Better matching between cash and award flights
+# - Robust stripping of "+N" day suffixes from times
+# - More flexible cash product/price discovery
 
 import os, re, json, time, sys, pathlib, types, subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 OUT = pathlib.Path("data/debug")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -36,7 +35,7 @@ except ModuleNotFoundError:
     Vm = types.ModuleType("distutils.version")
     class LooseVersion:
         def __init__(s,v): s.v=_parse(str(v))
-        def _cmp(s,o,op): ov=o.v if isinstance(o,LooseVersion) else _parse(str(o)); return op(s.v, ov)
+        def _cmp(s,o,op): ov=o.v if isinstance(o,o.__class__) else _parse(str(o)); return op(s.v, ov)
         def __lt__(s,o): return s._cmp(o, lambda a,b:a<b)
         def __le__(s,o): return s._cmp(o, lambda a,b:a<=b)
         def __gt__(s,o): return s._cmp(o, lambda a,b:a>b)
@@ -52,8 +51,9 @@ try:
     import undetected_chromedriver as uc
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.common.keys import Keys
-    from selenium.common.exceptions import TimeoutException
+    from selenium.common.exceptions import TimeoutException, NoSuchElementException
 except Exception as e:
     raise RuntimeError(f"Missing selenium / undetected_chromedriver: {e}")
 
@@ -61,15 +61,14 @@ except Exception as e:
 try:
     from bs4 import BeautifulSoup
 except Exception:
-    BeautifulSoup = None  # we'll handle absence gracefully and fall back to regex parsing
+    BeautifulSoup = None
 
-# Regex helpers used for fragment parsing
+# Regex helpers
 FLIGHT_RE = re.compile(r'\b([A-Z]{2}\s?\d{1,4})\b')
 TIME_RE = re.compile(r'(\d{1,2}:\d{2}\s*(?:AM|PM))', re.IGNORECASE)
 PRICE_RE = re.compile(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)')
-MILES_K_RE = re.compile(r'(\d+(?:\.\d+)?)\s*K\b', re.IGNORECASE)      # 12.5K
+MILES_K_RE = re.compile(r'(\d+(?:\.\d+)?)\s*K\b', re.IGNORECASE)
 MILES_COMMA_RE = re.compile(r'(\d{1,3}(?:,\d{3})+)\s*(?:mile|miles|point|points)?', re.IGNORECASE)
-MILES_SIMPLE_RE = re.compile(r'\b(\d{3,6})\b(?=\s*(?:mile|miles|point|points))', re.IGNORECASE)
 
 def mmddyyyy(date_iso: str) -> str:
     y, m, d = date_iso.split("-")
@@ -78,30 +77,66 @@ def mmddyyyy(date_iso: str) -> str:
 def calculate_cpp(cash: float, taxes: float, points: int) -> float:
     return 0.0 if not points else round(((cash - taxes)/points)*100, 2)
 
-def merge_and_dedup(cash: List[Dict], award: List[Dict]) -> List[Dict]:
-    """Match cash and award flights by flight number and departure time"""
+def normalize_flight_number(fn: str) -> str:
+    """Normalize flight number by removing spaces and ensuring consistent format"""
+    if not fn:
+        return ""
+    return re.sub(r'\s+', '', fn.upper())
+
+def extract_first_flight_number(flight_str: str) -> str:
+    """
+    Extract only the first flight number from a string like 'AA 1956, AA 2848'.
+    Returns normalized flight number (e.g., 'AA1956').
+    """
+    if not flight_str:
+        return ""
+    
+    # Split by comma and take first flight
+    first_flight = flight_str.split(',')[0].strip()
+    
+    # Normalize it
+    return normalize_flight_number(first_flight)
+
+def merge_and_dedup(cash: Optional[List[Dict]], award: Optional[List[Dict]]) -> List[Dict]:
+    """
+    Match cash and award flights by flight number and departure time.
+    Enhanced matching logic with normalization.
+    """
+    if cash is None:
+        cash = []
+    if award is None:
+        award = []
+    
+    print(f"\n🔄 Merging {len(cash)} cash flights with {len(award)} award flights...")
+    
     merged = []
     used_award = set()
+    unmatched_cash = []
 
     for c in cash:
+        cash_fn = normalize_flight_number(c.get("flight_number", ""))
+        cash_dep = c.get("departure_time", "").strip()
+        
         best_match = None
         best_idx = None
 
         for idx, a in enumerate(award):
             if idx in used_award:
                 continue
+            
+            award_fn = normalize_flight_number(a.get("flight_number", ""))
+            award_dep = a.get("departure_time", "").strip()
 
-            if (c.get("flight_number") == a.get("flight_number") and
-                c.get("departure_time") == a.get("departure_time")):
+            if cash_fn == award_fn and cash_dep == award_dep:
                 best_match = a
                 best_idx = idx
                 break
 
         if best_match:
             item = {
-                "flight_number": c["flight_number"],
-                "departure_time": c["departure_time"],
-                "arrival_time": c["arrival_time"],
+                "flight_number": cash_fn,
+                "departure_time": cash_dep,
+                "arrival_time": c.get("arrival_time", "").strip(),
                 "cash_price_usd": float(c["cash_price_usd"]),
                 "taxes_fees_usd": float(c.get("taxes_fees_usd", 5.60)),
                 "points_required": int(best_match["points_required"]),
@@ -113,8 +148,20 @@ def merge_and_dedup(cash: List[Dict], award: List[Dict]) -> List[Dict]:
             )
             merged.append(item)
             used_award.add(best_idx)
+        else:
+            unmatched_cash.append(c)
 
-    # Deduplicate
+    # Log unmatched for debugging
+    if unmatched_cash:
+        print(f"⚠ {len(unmatched_cash)} cash flights without award match")
+        _dump(unmatched_cash, "unmatched_cash")
+    
+    unused_award = [a for idx, a in enumerate(award) if idx not in used_award]
+    if unused_award:
+        print(f"⚠ {len(unused_award)} award flights without cash match")
+        _dump(unused_award, "unmatched_award")
+
+    # Final deduplication by unique key
     seen = set()
     unique = []
     for m in merged:
@@ -123,34 +170,386 @@ def merge_and_dedup(cash: List[Dict], award: List[Dict]) -> List[Dict]:
             seen.add(key)
             unique.append(m)
 
+    print(f"✅ Successfully merged {len(unique)} unique flight pairs")
     return unique
 
-# Helper to normalize amounts like "12.5K" to integer points (12500)
 def amount_to_int(s: Optional[str]) -> Optional[int]:
+    """Convert award amounts like '12.5K' or '12,500' to integer"""
     if not s:
         return None
-    s = s.strip().upper().replace(',', '')
+    s = s.strip().upper().replace(',', '').replace('$', '')
     s = re.sub(r'^[^\d\.\-]+', '', s)
+    
+    # Handle K format (12.5K -> 12500)
     m = re.match(r'^([\d\.]+)K$', s)
     if m:
         try:
-            val = float(m.group(1))
-            return int(round(val * 1000))
+            return int(round(float(m.group(1)) * 1000))
         except:
             return None
-    m2 = re.match(r'^(\d+)$', s)
+    
+    # Handle plain number
+    try:
+        return int(float(s))
+    except:
+        return None
+
+# --- New helpers for stripping "+N" suffix and robust price extraction -----
+
+def _strip_plus_day_suffix(time_str: Optional[str]) -> Optional[str]:
+    """
+    Remove trailing ' +N' day-offset markers (e.g. '6:00 AM +1') and any
+    following tooltip text. Leaves the normal time unchanged.
+    Examples:
+      '6:00 AM +1' -> '6:00 AM'
+      '6:00 AM +1 (next day)' -> '6:00 AM'
+    """
+    if not time_str:
+        return time_str
+    s = re.sub(r'\s*\(.*?\)', '', time_str)     # remove parenthetical tooltip parts
+    s = re.sub(r'\s*\+\d+\b.*$', '', s)         # remove " +1" (or +2, etc) and anything after
+    return s.strip()
+
+def _extract_price_from_element_text(txt: str) -> Optional[float]:
+    """
+    Heuristic to extract a USD cash price from a chunk of text.
+    Returns float or None.
+    """
+    if not txt:
+        return None
+    # Look for $###.## or $###
+    m = PRICE_RE.search(txt)
+    if m:
+        try:
+            return float(m.group(1).replace(',', ''))
+        except:
+            pass
+    # If no $ sign, look for a plain numeric that seems like a fare (>=50)
+    m2 = re.search(r'(\d{2,5}(?:\.\d{1,2})?)', txt.replace(',', ''))
     if m2:
         try:
-            return int(m2.group(1))
+            val = float(m2.group(1))
+            if val >= 50:
+                return val
         except:
-            return None
-    digits = re.findall(r'[\d\.]+', s)
-    if digits:
-        try:
-            return int(float(digits[0]))
-        except:
-            return None
+            pass
     return None
+
+# ---------------------------------------------------------------------------
+
+def parse_award_flights_structured(driver) -> List[Dict]:
+    """
+    Parse award flights from structured DOM (Pass 2).
+    Award page has different structure with cabin columns.
+    This version strips '+N' from times and is defensive about missing nodes.
+    """
+    flights = []
+    
+    try:
+        # Wait for award results grid
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "results-grid-container"))
+        )
+        
+        # Find all flight detail sections (left side)
+        flight_sections = driver.find_elements(By.CSS_SELECTOR, "app-slice-info-desktop")
+        
+        # Find all product sections (right side with prices)
+        product_sections = driver.find_elements(By.CSS_SELECTOR, "app-available-products-desktop")
+        
+        print(f"  Found {len(flight_sections)} flight blocks")
+        
+        if len(flight_sections) != len(product_sections):
+            print(f"  ⚠ Mismatch: {len(flight_sections)} flights vs {len(product_sections)} product sections")
+        
+        for idx, (flight_elem, product_elem) in enumerate(zip(flight_sections, product_sections)):
+            try:
+                # Parse flight details (left side)
+                try:
+                    origin_elem = flight_elem.find_element(By.CSS_SELECTOR, ".origin .city-code")
+                    origin = origin_elem.text.strip()
+                except Exception:
+                    origin = ""
+                try:
+                    dest_elem = flight_elem.find_element(By.CSS_SELECTOR, ".destination .city-code")
+                    destination = dest_elem.text.strip()
+                except Exception:
+                    destination = ""
+                try:
+                    dep_time_elem = flight_elem.find_element(By.CSS_SELECTOR, ".origin .flt-times")
+                    departure_time = _strip_plus_day_suffix(dep_time_elem.text.strip())
+                except Exception:
+                    # Fallback to first time found in text
+                    flight_text = flight_elem.text or ""
+                    times = TIME_RE.findall(flight_text)
+                    departure_time = times[0].strip() if times else ""
+                try:
+                    arr_time_elem = flight_elem.find_element(By.CSS_SELECTOR, ".destination .flt-times")
+                    arrival_time = _strip_plus_day_suffix(arr_time_elem.text.strip().split('\n')[0].strip())
+                except Exception:
+                    # Fallback to last time in text
+                    flight_text = flight_elem.text or ""
+                    times = TIME_RE.findall(flight_text)
+                    arrival_time = times[-1].strip() if times else ""
+                try:
+                    duration_elem = flight_elem.find_element(By.CSS_SELECTOR, ".duration")
+                    duration = duration_elem.text.strip()
+                except Exception:
+                    duration = ""
+                try:
+                    stops_elem = flight_elem.find_element(By.CSS_SELECTOR, ".stops")
+                    stops_text = stops_elem.text.strip()
+                except Exception:
+                    stops_text = ""
+                
+                # Parse stops
+                if "Nonstop" in stops_text or "Nonstop" in duration:
+                    stops = 0
+                elif "1 stop" in stops_text:
+                    stops = 1
+                elif "2 stops" in stops_text:
+                    stops = 2
+                else:
+                    stops = None
+                
+                # Extract flight numbers (legs)
+                flight_numbers = []
+                try:
+                    leg_elems = flight_elem.find_elements(By.CSS_SELECTOR, ".leg-info")
+                    if not leg_elems:
+                        leg_elems = flight_elem.find_elements(By.CSS_SELECTOR, ".segment, .leg")
+                    for leg in leg_elems:
+                        try:
+                            flt_num_elem = leg.find_element(By.CSS_SELECTOR, ".flight-number")
+                            flt_num = flt_num_elem.text.strip()
+                        except Exception:
+                            # fallback to any text that matches flight regex
+                            txt = leg.text or ""
+                            m = FLIGHT_RE.search(txt)
+                            flt_num = m.group(1) if m else ""
+                        if flt_num:
+                            flight_numbers.append(flt_num)
+                except Exception:
+                    pass
+                
+                # Only use the FIRST flight number for matching
+                if flight_numbers:
+                    flight_number = extract_first_flight_number(flight_numbers[0])
+                else:
+                    flight_number = "Unknown"
+                
+                # Parse award prices (right side)
+                award_miles = None
+                award_fees = None
+                
+                try:
+                    # Find all price buttons (defensive)
+                    price_buttons = product_elem.find_elements(By.CSS_SELECTOR, "button.btn-flight, .btn-flight, button")
+                    
+                    for btn in price_buttons:
+                        try:
+                            hidden_type = ""
+                            try:
+                                hidden_type = btn.find_element(By.CSS_SELECTOR, ".hidden-product-type").text.strip()
+                            except Exception:
+                                # sometimes type is in an attribute or aria-label
+                                try:
+                                    hidden_type = btn.get_attribute("aria-label") or ""
+                                except:
+                                    hidden_type = ""
+                            
+                            # Normalize type name
+                            if hidden_type:
+                                ht = hidden_type.strip().lower()
+                            else:
+                                ht = ""
+                            
+                            # Prefer main cabin / coach naming variants
+                            if ht in ("main", "main cabin", "maincabin", "coach", "main cabin (coach)"):
+                                # Get the miles amount
+                                miles_text = ""
+                                try:
+                                    miles_elem = btn.find_element(By.CSS_SELECTOR, ".per-pax-amount, .per-pax")
+                                    miles_text = miles_elem.text.strip()
+                                except Exception:
+                                    miles_text = btn.text or ""
+                                
+                                # Parse miles (e.g., "18K" -> 18000)
+                                miles_match = re.search(r'([\d\.]+)K', miles_text, re.IGNORECASE)
+                                if miles_match:
+                                    miles_value = float(miles_match.group(1))
+                                    award_miles = int(miles_value * 1000)
+                                else:
+                                    # maybe a full number like 18,000
+                                    num_match = re.search(r'(\d{1,3}(?:[,\d]{0,})+)', miles_text.replace(' ', ''))
+                                    if num_match:
+                                        award_miles = amount_to_int(num_match.group(1))
+                                
+                                # Get the fees
+                                try:
+                                    fees_elem = btn.find_element(By.CSS_SELECTOR, ".per-pax-addon, .fees, .addon")
+                                    fees_text = fees_elem.text.strip()
+                                    fees_match = re.search(r'\$?([\d.]+)', fees_text)
+                                    if fees_match:
+                                        award_fees = float(fees_match.group(1))
+                                except:
+                                    award_fees = award_fees
+                                
+                                # Found a main-cabin candidate; break if miles found
+                                if award_miles is not None:
+                                    break
+                        except Exception:
+                            continue
+                    
+                except Exception as e:
+                    print(f"    ⚠ Flight {idx}: Could not parse award prices: {e}")
+                
+                # Only add flight if we found award pricing
+                if award_miles is not None:
+                    flights.append({
+                        "flight_number": flight_number,
+                        "departure_time": departure_time,
+                        "arrival_time": arrival_time,
+                        "points_required": award_miles,
+                        "taxes_fees_usd": award_fees if award_fees else 5.60
+                    })
+                
+            except Exception as e:
+                print(f"    ⚠ Flight {idx}: Parsing error: {e}")
+                continue
+        
+        print(f"  Extracted {len(flights)} flights")
+        
+    except Exception as e:
+        print(f"  ❌ Award structured parsing failed: {e}")
+    
+    return flights
+
+def parse_cash_flights_structured(driver) -> List[Dict]:
+    """
+    Parse cash flights from structured DOM (Pass 1).
+    Uses Selenium to extract departure and arrival times correctly and
+    more robustly locate cash product/price nodes.
+    """
+    flights = []
+    
+    try:
+        # Wait for results grid
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "app-slice-details, app-slice-info-desktop"))
+        )
+        
+        # Find all flight detail sections
+        flight_sections = driver.find_elements(By.CSS_SELECTOR, "app-slice-details, app-slice-info-desktop")
+        
+        # Find all product sections (right side with prices)
+        product_sections = driver.find_elements(By.CSS_SELECTOR, "app-available-products-desktop, app-product-groups, .product-groups")
+        
+        print(f"  Found {len(flight_sections)} flight blocks")
+        
+        if len(flight_sections) != len(product_sections):
+            print(f"  ⚠ Mismatch: {len(flight_sections)} flights vs {len(product_sections)} product sections")
+        
+        for idx, (flight_elem, product_elem) in enumerate(zip(flight_sections, product_sections)):
+            try:
+                # Extract departure time (origin)
+                try:
+                    dep_time_elem = flight_elem.find_element(By.CSS_SELECTOR, ".origin .flt-times")
+                    departure_time = _strip_plus_day_suffix(dep_time_elem.text.strip())
+                except Exception:
+                    # Fallback to searching for time patterns
+                    flight_text = flight_elem.text or ""
+                    times = TIME_RE.findall(flight_text)
+                    departure_time = times[0].strip() if times else ""
+                
+                # Extract arrival time (destination)
+                try:
+                    arr_time_elem = flight_elem.find_element(By.CSS_SELECTOR, ".destination .flt-times")
+                    arrival_time = _strip_plus_day_suffix(arr_time_elem.text.strip().split('\n')[0].strip())
+                except Exception:
+                    # Fallback to searching for time patterns
+                    flight_text = flight_elem.text or ""
+                    times = TIME_RE.findall(flight_text)
+                    arrival_time = times[-1].strip() if len(times) >= 1 else ""
+                
+                # Extract flight numbers
+                flight_numbers = []
+                try:
+                    leg_elems = flight_elem.find_elements(By.CSS_SELECTOR, ".leg-info .flight-number, .flight-number, .leg .flight-number")
+                    for leg in leg_elems:
+                        flt_num = leg.text.strip()
+                        if flt_num:
+                            flight_numbers.append(flt_num)
+                except:
+                    pass
+                
+                # If no flight numbers via class, try regex on flight text
+                if not flight_numbers:
+                    flight_text = flight_elem.text or ""
+                    matches = FLIGHT_RE.findall(flight_text)
+                    flight_numbers = [m for m in matches if m]
+                
+                # Only use the FIRST flight number for matching
+                if flight_numbers:
+                    flight_number = extract_first_flight_number(flight_numbers[0])
+                else:
+                    # If we cannot find a flight number, skip (can't match)
+                    continue
+                
+                # Extract cash price from product container with multiple fallbacks
+                cash_price = None
+                
+                try:
+                    # 1) Look for explicit per-pax amount nodes (common in cash HTML)
+                    try:
+                        per_pax_nodes = product_elem.find_elements(By.CSS_SELECTOR, ".per-pax-amount, .per-pax, .price .per-pax-amount")
+                        for p in per_pax_nodes:
+                            val = _extract_price_from_element_text(p.text or "")
+                            if val and val >= 50:
+                                cash_price = val
+                                break
+                    except Exception:
+                        per_pax_nodes = []
+                    
+                    # 2) If not found, inspect product buttons for $ in text
+                    if cash_price is None:
+                        price_buttons = product_elem.find_elements(By.CSS_SELECTOR, "button.btn-flight, .btn-flight, button, a")
+                        for btn in price_buttons:
+                            txt = btn.text or ""
+                            val = _extract_price_from_element_text(txt)
+                            if val and val >= 50:
+                                cash_price = val
+                                break
+                    
+                    # 3) Fallback: search the whole product container text
+                    if cash_price is None:
+                        container_text = product_elem.text or ""
+                        val = _extract_price_from_element_text(container_text)
+                        if val and val >= 50:
+                            cash_price = val
+                except Exception as e:
+                    print(f"    ⚠ Flight {idx}: Could not parse cash price: {e}")
+                
+                # Only add flight if we found pricing and times
+                if cash_price is not None and departure_time and arrival_time:
+                    flights.append({
+                        "flight_number": flight_number,
+                        "departure_time": departure_time,
+                        "arrival_time": arrival_time,
+                        "cash_price_usd": cash_price,
+                        "taxes_fees_usd": 5.60
+                    })
+                
+            except Exception as e:
+                print(f"    ⚠ Flight {idx}: Parsing error: {e}")
+                continue
+        
+        print(f"  Extracted {len(flights)} flights")
+        
+    except Exception as e:
+        print(f"  ❌ Cash structured parsing failed: {e}")
+    
+    return flights
 
 class AAScraper:
     def __init__(self):
@@ -163,7 +562,6 @@ class AAScraper:
         opts.add_argument('--no-sandbox')
         opts.add_argument('--disable-dev-shm-usage')
         opts.add_argument("--window-size=1400,1000")
-        # helpful: set language to US to match site text rendering
         opts.add_argument("--lang=en-US,en")
         try:
             self.driver = uc.Chrome(options=opts)
@@ -178,7 +576,6 @@ class AAScraper:
                 document.querySelectorAll('#onetrust-accept-btn-handler, button[aria-label*="close" i], button[title*="Close" i]').forEach(el => {
                     try { el.click(); } catch(e) {}
                 });
-                // remove any persistent overlays
                 document.querySelectorAll('.onetrust-pc-dark-filter, .onetrust-banner-sdk, adc-cookie-banner').forEach(n=>{ try{ n.remove() }catch(e){}});
             """)
             time.sleep(0.4)
@@ -188,7 +585,6 @@ class AAScraper:
     def open_home(self):
         print("🌐 Loading AA.com...")
         self.driver.get("https://www.aa.com/")
-        # small sleep + dismiss to allow initial JS
         time.sleep(3.0)
         self._dismiss_popups()
         _save_html(self.driver, "home")
@@ -200,27 +596,24 @@ class AAScraper:
         self._dismiss_popups()
         time.sleep(0.3)
 
-        # One-way: prefer clicking the label
+        # One-way
         try:
             self.driver.find_element(By.CSS_SELECTOR, "label[for='flightSearchForm.tripType.oneWay']").click()
             time.sleep(0.22)
-            print("✓ One-way selected (via label)")
+            print("✓ One-way selected")
         except Exception:
             try:
                 ow = self.driver.find_element(By.ID, "flightSearchForm.tripType.oneWay")
                 self.driver.execute_script("arguments[0].click()", ow)
                 time.sleep(0.22)
-                print("✓ One-way selected (via JS)")
             except Exception as e:
                 print(f"  ⚠ One-way selection failed: {e}")
 
         # Redeem miles toggle
         try:
-            # Attempt to locate the checkbox input first
             cb = self.driver.find_element(By.ID, "flightSearchForm.tripType.redeemMiles")
             checked = cb.is_selected()
             if redeem_miles and not checked:
-                # click label if available
                 try:
                     lbl = self.driver.find_element(By.CSS_SELECTOR, "label[for='flightSearchForm.tripType.redeemMiles']")
                     lbl.click()
@@ -234,21 +627,9 @@ class AAScraper:
                 except:
                     self.driver.execute_script("arguments[0].click()", cb)
                 time.sleep(0.24)
-            print(f"✓ Redeem miles {'enabled' if redeem_miles else 'disabled'} (attempted)")
+            print(f"✓ Redeem miles {'enabled' if redeem_miles else 'disabled'}")
         except Exception:
-            # fallback: try to click any label that looks like redeem/miles
-            try:
-                lbls = self.driver.find_elements(By.XPATH, "//label[contains(., 'Redeem') or contains(., 'Miles') or contains(., 'redeem') or contains(., 'miles')]")
-                for l in lbls:
-                    try:
-                        l.click()
-                        time.sleep(0.2)
-                        break
-                    except:
-                        continue
-                print("✓ Redeem miles toggle attempted (label fallback)")
-            except:
-                print("  ⚠ Redeem miles toggle not found")
+            print("  ⚠ Redeem miles toggle not found")
 
         # Origin
         try:
@@ -280,7 +661,7 @@ class AAScraper:
         except Exception as e:
             print(f"  ⚠ Destination input failed: {e}")
 
-        # Date - set via JS to avoid datepicker issues
+        # Date
         try:
             date_val = mmddyyyy(date)
             self.driver.execute_script("""
@@ -297,7 +678,7 @@ class AAScraper:
             print(f"  ⚠ Date input failed: {e}")
 
     def submit_search(self):
-        """Submit the search with robust fallbacks"""
+        """Submit the search"""
         self._dismiss_popups()
         try:
             btn = self.driver.find_element(By.XPATH, "//button[contains(., 'Search') or @type='submit']")
@@ -305,22 +686,19 @@ class AAScraper:
             print("✓ Search submitted")
         except Exception:
             try:
-                # fallback: press Enter on destination box
                 dest = self.driver.find_element(By.NAME, "destinationAirport")
                 dest.send_keys(Keys.ENTER)
-                print("↩ Search submitted (Enter key)")
+                print("↩ Search submitted (Enter)")
             except Exception as e:
                 print(f"  ⚠ Submit failed: {e}")
         time.sleep(1.5)
 
     def _coax_lazy_load(self):
-        """Try a set of actions to coax lazy-load of results (scrolling, clicking 'show more' etc.)"""
+        """Scroll and trigger lazy loading"""
         try:
-            # gentle scrolling pattern
             for _ in range(3):
                 self.driver.execute_script("window.scrollBy(0, window.innerHeight/3);")
                 time.sleep(0.35)
-            # click 'Show more' or similar buttons
             try:
                 more_buttons = self.driver.find_elements(By.XPATH, "//button[contains(., 'Show more') or contains(., 'More results') or contains(., 'Load more')]")
                 for b in more_buttons:
@@ -332,30 +710,20 @@ class AAScraper:
                         continue
             except:
                 pass
-            # small movement to trigger intersection observers
-            try:
-                self.driver.execute_script("document.querySelectorAll('div[class*=\"results\"], main, div[role=\"main\"]').forEach(el=>el.scrollTo(0, el.scrollHeight));")
-            except:
-                pass
         except Exception:
             pass
 
     def wait_for_results(self, timeout=60, is_award: bool = False, expected_min=10) -> bool:
-        """
-        Improved wait logic:
-         - looks for modern 'app-slice-details' or legacy container counts
-         - falls back to regex-based counts on page_source for times/flight numbers/miles/price
-         - performs lazy-load coaxing periodically
-        """
+        """Wait for results to load"""
         print("⏳ Waiting for results...")
         start = time.time()
         last_count = 0
+        
         while time.time() - start < timeout:
             try:
-                # quick JS counts for modern/legacy containers
                 counts = self.driver.execute_script("""
                     const modern = document.querySelectorAll('app-slice-details').length;
-                    const legacy = document.querySelectorAll('div[class*="result"], div[class*="slice"], div[class*="flight"], li[role="option"], div[class*="offer"]').length;
+                    const legacy = document.querySelectorAll('div[class*="result"], div[class*="slice"], div[class*="flight"]').length;
                     return {modern: modern, legacy: legacy};
                 """)
                 modern = int(counts.get("modern", 0))
@@ -364,529 +732,86 @@ class AAScraper:
                 modern = 0
                 legacy = 0
 
-            # If site uses modern slices and we see enough elements -> done
             if modern >= expected_min or legacy >= expected_min:
                 total = max(modern, legacy)
-                print(f"✓ Found {total} flight elements (dom detection)")
-                # wait a short moment for prices/miles to stabilize
+                print(f"✓ Found {total} flight elements")
                 time.sleep(2.0)
                 return True
 
-            # Otherwise, use page_source heuristics (times or miles/price presence)
             try:
                 src = self.driver.page_source or ""
             except Exception:
                 src = ""
 
-            # time occurrences (each flight has two times usually; require at least expected_min*2 matches)
             times_found = len(TIME_RE.findall(src))
-            # flight number occurrences
             flights_found = len(FLIGHT_RE.findall(src))
-            # price / miles indicators
             price_found = len(PRICE_RE.findall(src))
-            miles_found = len(MILES_K_RE.findall(src)) + len(MILES_COMMA_RE.findall(src)) + len(MILES_SIMPLE_RE.findall(src))
+            miles_found = len(MILES_K_RE.findall(src)) + len(MILES_COMMA_RE.findall(src))
 
-            # heuristics: if we have many time matches or flight matches + price/miles hints -> results likely present
-            # For award pages we expect miles to be present more often; for cash pages prices.
             if is_award:
-                # treat a flight as present if we find at least 1 flight number and either times or miles
                 if flights_found >= expected_min and (times_found >= expected_min or miles_found >= expected_min):
-                    print(f"✓ Found {flights_found} candidate flight entries (text heuristics)")
+                    print(f"✓ Found {flights_found} flights (text heuristics)")
                     time.sleep(1.5)
                     return True
             else:
-                # cash: prefer price presence
                 if flights_found >= expected_min and (times_found >= expected_min or price_found >= expected_min):
-                    print(f"✓ Found {flights_found} candidate flight entries (text heuristics)")
+                    print(f"✓ Found {flights_found} flights (text heuristics)")
                     time.sleep(1.5)
                     return True
 
-            # If counts are increasing, update last_count and continue; else coax lazy load
             current_count = max(modern, legacy, flights_found)
             if current_count > last_count:
                 last_count = current_count
             else:
-                # coax lazy loading occasionally
                 self._coax_lazy_load()
-
-                # try clicking possible award toggles (for award pass)
-                if is_award:
-                    try:
-                        toggles = self.driver.find_elements(By.XPATH, "//button[contains(translate(., 'MILES', 'miles'),'miles') or contains(., 'Redeem') or contains(., 'Award') or contains(., 'Show award')]")
-                        for t in toggles:
-                            try:
-                                if t.is_displayed():
-                                    self.driver.execute_script("arguments[0].click()", t)
-                                    time.sleep(0.4)
-                                    break
-                            except:
-                                continue
-                    except:
-                        pass
 
             time.sleep(1.0)
 
         print("⚠ Timeout waiting for results")
         return False
 
-    # -------- DOM-structured parsing fallback ----------
-    def _parse_dom(self, is_award: bool) -> List[Dict]:
+    def parse_flights_structured(self, is_award: bool) -> List[Dict]:
         """
-        Use BeautifulSoup to extract structured info when available:
-        - For awards: look for per-pax amounts, flight-details blocks, and flight-number spans
-        - For cash: look for price/fare spans and route/time blocks
-        Returns a list of dicts similar to parse_flights() output with keys price/miles as applicable.
+        Parse flights using structured approach.
+        Routes to specialized parsers for cash vs award flights.
         """
-        if BeautifulSoup is None:
-            return []
+        print(f"📊 Parsing {'award' if is_award else 'cash'} flights (structured)...")
+        
+        # Use specialized parsers
+        if is_award:
+            return parse_award_flights_structured(self.driver)
+        else:
+            return parse_cash_flights_structured(self.driver)
 
-        src = ""
-        try:
-            src = self.driver.page_source or ""
-        except Exception:
-            return []
-
-        soup = BeautifulSoup(src, "html.parser")
-        results = []
-        seen = set()
-
-        # Modern flight detail blocks
-        flight_blocks = soup.find_all(id=re.compile(r'^flight-details-\d+$'))
-        for fb in flight_blocks:
-            # extract flight numbers (could be several)
-            fnums = []
-            for span in fb.find_all("span", class_=lambda c: c and 'flight-number' in c):
-                txt = span.get_text(strip=True)
-                if txt:
-                    fnums.append(re.sub(r'\s+', '', txt))
-            # fallback: text search inside block for flight pattern
-            if not fnums:
-                m = FLIGHT_RE.search(fb.get_text(" ", strip=True) if fb else "")
-                if m:
-                    fnums = [re.sub(r'\s+', '', m.group(1))]
-
-            flight_number = fnums[0] if fnums else None
-
-            # times
-            dep = None
-            arr = None
-            origin_div = fb.find('div', class_=lambda c: c and 'origin' in c) if fb else None
-            dest_div = fb.find('div', class_=lambda c: c and 'destination' in c) if fb else None
-            if origin_div:
-                t = origin_div.find('div', class_=lambda c: c and 'flt-times' in c)
-                if t:
-                    dep = re.sub(r'\+1', '', t.get_text(" ", strip=True)).strip()
-            if dest_div:
-                t = dest_div.find('div', class_=lambda c: c and 'flt-times' in c)
-                if t:
-                    arr = re.sub(r'\+1', '', t.get_text(" ", strip=True)).strip()
-
-            # find corresponding product block nearby
-            product_block = None
-            # search siblings in DOM
-            sib = fb.find_next_sibling()
-            walk = 0
-            while sib and walk < 8:
-                if sib.find_all('span', class_=lambda c: c and ('per-pax-amount' in c or 'price' in c or 'amount' in c)):
-                    product_block = sib
-                    break
-                sib = sib.find_next_sibling()
-                walk += 1
-            # fallback: search parent for app-available-products-desktop
-            if not product_block:
-                parent = fb.parent
-                if parent:
-                    product_block = parent.find('app-available-products-desktop') or parent.find('div', class_=lambda c: c and 'available-products' in c)
-
-            # extract amounts from product_block (award: per-pax-amount; cash: price spans)
-            if product_block:
-                if is_award:
-                    amount_spans = product_block.find_all('span', class_=lambda c: c and 'per-pax-amount' in c)
-                    for s in amount_spans:
-                        raw = s.get_text(strip=True)
-                        pts = amount_to_int(raw)
-                        # availability heuristic
-                        parent_btn = s.find_parent('button')
-                        available = True
-                        if parent_btn:
-                            cls = parent_btn.get('class') or []
-                            if 'disabled' in cls or 'not-available' in cls:
-                                available = False
-                        if pts and flight_number:
-                            key = (flight_number, dep, pts)
-                            if key in seen:
-                                continue
-                            seen.add(key)
-                            results.append({
-                                "flight_number": flight_number,
-                                "departure_time": dep,
-                                "arrival_time": arr,
-                                "miles": pts
-                            })
-                else:
-                    # cash prices
-                    price_spans = product_block.find_all('span', class_=lambda c: c and ('price' in c or 'amount' in c or 'fare' in c))
-                    if not price_spans:
-                        # fallback: any $ occurrences in product_block text
-                        for m in PRICE_RE.finditer(product_block.get_text(" ", strip=True)):
-                            try:
-                                val = float(m.group(1).replace(',', ''))
-                                if flight_number:
-                                    key = (flight_number, dep, val)
-                                    if key in seen:
-                                        continue
-                                    seen.add(key)
-                                    results.append({
-                                        "flight_number": flight_number,
-                                        "departure_time": dep,
-                                        "arrival_time": arr,
-                                        "price": val
-                                    })
-                            except:
-                                continue
-                    else:
-                        for s in price_spans:
-                            raw = s.get_text(strip=True)
-                            m = PRICE_RE.search(raw)
-                            if m:
-                                try:
-                                    val = float(m.group(1).replace(',', ''))
-                                    if flight_number:
-                                        key = (flight_number, dep, val)
-                                        if key in seen:
-                                            continue
-                                        seen.add(key)
-                                        results.append({
-                                            "flight_number": flight_number,
-                                            "departure_time": dep,
-                                            "arrival_time": arr,
-                                            "price": val
-                                        })
-                                except:
-                                    continue
-
-        # As an additional fallback, look for "available-products-desktop" style lists (legacy)
-        if not results:
-            for container in soup.find_all('div', class_=lambda c: c and ('available-products' in c or 'available-products-desktop' in c or 'choose-flights-price' in c)):
-                txt = container.get_text(" ", strip=True)
-                fnums = FLIGHT_RE.findall(txt)
-                if not fnums:
-                    continue
-                flight_number = re.sub(r'\s+', '', fnums[0])
-                dep = None
-                arr = None
-                times = TIME_RE.findall(txt)
-                if times:
-                    dep = times[0]
-                    arr = times[1] if len(times) > 1 else None
-                if is_award:
-                    for m in MILES_K_RE.finditer(txt):
-                        pts = amount_to_int(m.group(0))
-                        if pts:
-                            key = (flight_number, dep, pts)
-                            if key in seen:
-                                continue
-                            seen.add(key)
-                            results.append({"flight_number": flight_number, "departure_time": dep, "arrival_time": arr, "miles": pts})
-                    # comma-style
-                    for m in MILES_COMMA_RE.finditer(txt):
-                        try:
-                            pts = int(m.group(1).replace(',', ''))
-                            key = (flight_number, dep, pts)
-                            if key in seen:
-                                continue
-                            seen.add(key)
-                            results.append({"flight_number": flight_number, "departure_time": dep, "arrival_time": arr, "miles": pts})
-                        except:
-                            continue
-                else:
-                    for m in PRICE_RE.finditer(txt):
-                        try:
-                            val = float(m.group(1).replace(',', ''))
-                            key = (flight_number, dep, val)
-                            if key in seen:
-                                continue
-                            seen.add(key)
-                            results.append({"flight_number": flight_number, "departure_time": dep, "arrival_time": arr, "price": val})
-                        except:
-                            continue
-
-        return results
-
-    # -------- parsing logic that handles both modern and legacy structures ----------
     def parse_flights(self, is_award: bool) -> List[Dict]:
-        """Robust parse that gathers candidate text fragments from multiple selectors, then regex-parses them.
-           Additionally attempts DOM-structured parsing via BeautifulSoup when available and merges results.
-        """
-        print(f"📊 Parsing {'award' if is_award else 'cash'} flights...")
+        """Main parsing dispatcher"""
         _save_html(self.driver, f"{'award' if is_award else 'cash'}_results")
-
-        # Candidate selectors to extract fragments from (modern + legacy + list-like)
-        selectors = [
-            "app-slice-details",
-            "div[class*='result']",
-            "div[class*='slice']",
-            "div[class*='flight']",
-            "li[role='option']",
-            "div[class*='offer']",
-            "ul[role='list'] > li",
-            "div[class*='itinerary']",
-            "div[class*='card']"
-        ]
-
-        # Collect fragments via JS to minimize cross-process DOM queries
-        fragments = []
-        try:
-            js = """
-            const sels = arguments[0];
-            const out = [];
-            for (const s of sels) {
-                try {
-                    const nodes = Array.from(document.querySelectorAll(s));
-                    for (const n of nodes) {
-                        const t = (n.innerText || '').trim();
-                        if (t && t.length > 20) out.push(t);
-                    }
-                } catch(e){}
-            }
-            // Also include page-level splits for cases where everything is in one container
-            try {
-                const shell = document.querySelector('div[class*=\"results\"], main, div[role=\"main\"]');
-                if (shell) {
-                    const parts = shell.innerText.split('\\n\\n');
-                    for (const p of parts) {
-                        const q = (p || '').trim();
-                        if (q && q.length > 20) out.push(q);
-                    }
-                }
-            } catch(e){}
-            return out;
-            """
-            fragments = self.driver.execute_script(js, selectors) or []
-        except Exception as e:
-            # fallback: use full page source
-            try:
-                fragments = [self.driver.page_source]
-            except Exception:
-                fragments = []
-
-        # Python-side parsing of fragments
-        parsed = []
-        seen_keys = set()
-        for frag in fragments:
-            text = re.sub(r'\s+', ' ', frag).strip()
-            # Extract flight numbers (could be multiple per fragment for multi-segment)
-            fnums = FLIGHT_RE.findall(text)
-            if not fnums:
-                continue
-            # Use first flight number as canonical for this fragment
-            flight_number = fnums[0].replace(" ", "")
-            # Extract times
-            times = TIME_RE.findall(text)
-            if not times:
-                # sometimes times use 24-hour or other spacing; try a looser regex for HH:MM
-                times_loose = re.findall(r'\b([0-2]?\d:[0-5]\d)\b', text)
-                times = times_loose[:2] if times_loose else []
-            if not times or len(times) < 1:
-                # can't parse times; skip fragment
-                continue
-            departure_time = times[0]
-            arrival_time = times[1] if len(times) > 1 else None
-
-            # Price
-            price = None
-            m_price = PRICE_RE.search(text)
-            if m_price:
-                try:
-                    price = float(m_price.group(1).replace(',', ''))
-                except:
-                    price = None
-
-            # Miles / points
-            miles = None
-            m_k = MILES_K_RE.search(text)
-            if m_k:
-                try:
-                    miles = int(round(float(m_k.group(1)) * 1000))
-                except:
-                    miles = None
-            if miles is None:
-                m_comma = MILES_COMMA_RE.search(text)
-                if m_comma:
-                    try:
-                        miles = int(m_comma.group(1).replace(',', ''))
-                    except:
-                        miles = None
-            if miles is None:
-                m_simple = MILES_SIMPLE_RE.search(text)
-                if m_simple:
-                    try:
-                        miles = int(m_simple.group(1).replace(',', ''))
-                    except:
-                        miles = None
-
-            # For award pages we allow entries with miles and no price; for cash pages we require price
-            if is_award and miles is None:
-                # try looser search for any "award" digits nearby
-                extra = re.search(r'(\d{2,6})\s*(?:award|awards|miles|points|pts)\b', text, re.I)
-                if extra:
-                    try:
-                        miles = int(extra.group(1).replace(',', ''))
-                    except:
-                        miles = None
-
-            if not is_award and price is None:
-                # Skip fragments without price for cash pass
-                continue
-
-            # Build record
-            rec = {
-                "flight_number": flight_number,
-                "departure_time": departure_time,
-                "arrival_time": arrival_time,
-                "price": price,
-                "miles": miles
-            }
-
-            key = (rec["flight_number"], rec["departure_time"], str(rec.get("price")), str(rec.get("miles")))
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            parsed.append(rec)
-
-        # Try DOM-structured extraction (BeautifulSoup) and merge results if it finds additional entries
-        dom_parsed = []
-        try:
-            dom_parsed = self._parse_dom(is_award=is_award)
-        except Exception:
-            dom_parsed = []
-
-        # Convert dom_parsed into same intermediate structure as parsed
-        for d in dom_parsed:
-            # d may contain 'miles' or 'price'
-            fp = {
-                "flight_number": d.get("flight_number"),
-                "departure_time": d.get("departure_time"),
-                "arrival_time": d.get("arrival_time"),
-                "price": d.get("price") if "price" in d else None,
-                "miles": d.get("miles") if "miles" in d else None
-            }
-            key = (fp["flight_number"], fp["departure_time"], str(fp.get("price")), str(fp.get("miles")))
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            parsed.append(fp)
-
-        # If parsed is empty but the page contains many times/flight numbers, fall back to page_source block parsing
-        if not parsed:
-            try:
-                src = self.driver.page_source or ""
-                blocks = re.split(r'</(?:div|li|section|article)>', src, flags=re.IGNORECASE)
-                for b in blocks:
-                    if len(b) < 200:
-                        continue
-                    txt = re.sub(r'<[^>]+>', ' ', b)
-                    txt = re.sub(r'\s+', ' ', txt).strip()
-                    if len(txt) < 30:
-                        continue
-                    # reuse same parsing logic for block
-                    fnums = FLIGHT_RE.findall(txt)
-                    if not fnums:
-                        continue
-                    flight_number = fnums[0].replace(" ", "")
-                    times = TIME_RE.findall(txt)
-                    if not times:
-                        continue
-                    departure_time = times[0]
-                    arrival_time = times[1] if len(times) > 1 else None
-                    m_price = PRICE_RE.search(txt)
-                    price = float(m_price.group(1).replace(',', '')) if m_price else None
-                    miles = None
-                    m_k = MILES_K_RE.search(txt)
-                    if m_k:
-                        miles = int(round(float(m_k.group(1)) * 1000))
-                    m_comma = MILES_COMMA_RE.search(txt)
-                    if miles is None and m_comma:
-                        try:
-                            miles = int(m_comma.group(1).replace(',', ''))
-                        except:
-                            miles = None
-                    rec = {"flight_number": flight_number, "departure_time": departure_time, "arrival_time": arrival_time, "price": price, "miles": miles}
-                    key = (rec["flight_number"], rec["departure_time"], str(rec.get("price")), str(rec.get("miles")))
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    parsed.append(rec)
-                    if len(parsed) > 500:
-                        break
-            except Exception:
-                pass
-
-        _dump(parsed, f"raw_{'award' if is_award else 'cash'}_flights")
-
-        # Convert parsed list to expected output format for this stage (before merging)
-        flights = []
-        for p in parsed:
-            if is_award and p.get("miles"):
-                flights.append({
-                    "flight_number": p["flight_number"],
-                    "departure_time": p["departure_time"],
-                    "arrival_time": p["arrival_time"],
-                    "points_required": int(p["miles"])
-                })
-            elif not is_award and p.get("price") is not None:
-                flights.append({
-                    "flight_number": p["flight_number"],
-                    "departure_time": p["departure_time"],
-                    "arrival_time": p["arrival_time"],
-                    "cash_price_usd": float(p["price"]),
-                    "taxes_fees_usd": 5.60
-                })
-
-        # Deduplicate final list
-        seen = set()
-        unique = []
-        for f in flights:
-            key = (f["flight_number"], f["departure_time"], f.get("cash_price_usd"), f.get("points_required"))
-            if key not in seen:
-                seen.add(key)
-                unique.append(f)
-
-        print(f"  Extracted {len(unique)} flights")
-        _dump(unique, f"parsed_{'award' if is_award else 'cash'}_flights")
-        return unique
+        
+        # Try structured parsing first
+        flights = self.parse_flights_structured(is_award)
+        
+        if not flights or len(flights) < 10:
+            print(f"  ⚠ Structured parsing found only {len(flights)} flights, expected ~40")
+        
+        return flights
 
     def search_flights(self, origin: str, dest: str, date: str, redeem_miles: bool) -> List[Dict]:
-        """Complete search flow with additional coaxing for award pass"""
+        """Complete search flow"""
         self.fill_search_form(origin, dest, date, redeem_miles)
         self.submit_search()
-        # Award pages can be slower / require extra toggles: give them more time and different heuristics
         ok = self.wait_for_results(timeout=90 if redeem_miles else 60, is_award=redeem_miles, expected_min=10)
+        
         if not ok:
-            print("⚠ Results not detected (timed out). Attempting one recovery cycle (scroll/click/toggle) and retry.")
-            # recovery attempt: scroll, click possible award toggles, re-check
+            print("⚠ Results not detected, attempting recovery...")
             try:
                 self._coax_lazy_load()
-                # click possible award toggles
-                if redeem_miles:
-                    try:
-                        toggles = self.driver.find_elements(By.XPATH, "//button[contains(., 'Miles') or contains(., 'Redeem') or contains(., 'Award') or contains(., 'Show award') or contains(., 'See awards')]")
-                        for t in toggles:
-                            try:
-                                if t.is_displayed():
-                                    self.driver.execute_script("arguments[0].click()", t)
-                                    time.sleep(0.6)
-                            except:
-                                continue
-                    except:
-                        pass
                 time.sleep(2.0)
                 ok = self.wait_for_results(timeout=45, is_award=redeem_miles, expected_min=8)
             except Exception:
                 ok = False
 
         if not ok:
-            print("⚠ Failed to detect results after recovery attempts; returning empty list")
+            print("⚠ Failed to detect results, returning empty list")
             return []
 
         return self.parse_flights(is_award=redeem_miles)
@@ -899,7 +824,6 @@ class AAScraper:
         except:
             pass
 
-# ---------- top-level orchestration ----------
 def search(params: Dict[str, Any]) -> Dict[str, Any]:
     scraper = AAScraper()
 
@@ -918,7 +842,7 @@ def search(params: Dict[str, Any]) -> Dict[str, Any]:
             redeem_miles=False
         )
 
-        # Return home (soft reset)
+        # Return home
         print("\n🏠 Returning home...")
         try:
             scraper.driver.get("https://www.aa.com/")
@@ -948,22 +872,21 @@ def search(params: Dict[str, Any]) -> Dict[str, Any]:
                 "date": params["date"],
                 "passengers": params.get("passengers", 1),
                 "cabin_class": params.get("cabin", "economy"),
-                "cash_count": len(cash_flights),
-                "award_count": len(award_flights),
+                "cash_count": len(cash_flights) if cash_flights else 0,
+                "award_count": len(award_flights) if award_flights else 0,
                 "merged_count": len(merged)
             },
             "flights": merged,
             "total_results": len(merged)
         }
 
-        # Save output
         pathlib.Path("output.json").write_text(json.dumps(output, indent=2), encoding="utf-8")
 
         print(f"\n{'='*60}")
         print("✅ SUCCESS")
         print(f"{'='*60}")
-        print(f"Cash flights:  {len(cash_flights)}")
-        print(f"Award flights: {len(award_flights)}")
+        print(f"Cash flights:  {len(cash_flights) if cash_flights else 0}")
+        print(f"Award flights: {len(award_flights) if award_flights else 0}")
         print(f"Merged:        {len(merged)}")
         print(f"Output:        output.json")
         print(f"{'='*60}\n")
@@ -981,8 +904,8 @@ def search(params: Dict[str, Any]) -> Dict[str, Any]:
 def _cli(argv):
     import argparse
     ap = argparse.ArgumentParser(description="AA Flight Scraper - CPP Calculator")
-    ap.add_argument("--origin", required=True, help="Origin airport code (e.g., LAX)")
-    ap.add_argument("--destination", required=True, help="Destination airport code (e.g., JFK)")
+    ap.add_argument("--origin", required=True, help="Origin airport code")
+    ap.add_argument("--destination", required=True, help="Destination airport code")
     ap.add_argument("--date", required=True, help="Date in YYYY-MM-DD format")
     ap.add_argument("--passengers", type=int, default=1, help="Number of passengers")
     ap.add_argument("--cabin", default="economy", help="Cabin class")
@@ -1009,12 +932,10 @@ def main(argv=None):
 
     result = search(params)
 
-    # Print summary
     if result["flights"]:
-        print("Sample flights:")
+        print("\nSample flights:")
         sample = result["flights"][:5]
         for flight in sample:
-            # merged flights have cash_price_usd and points_required
             cp = flight.get("cash_price_usd")
             pts = flight.get("points_required")
             cpp = flight.get("cpp")
