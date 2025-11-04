@@ -5,10 +5,254 @@
     "date": "2025-12-15",
     "passengers": 1,
     "cabin_class": "economy",
-    "cash_count": 0,
-    "award_count": 0,
-    "merged_count": 0
+    "cash_count": 44,
+    "award_count": 100,
+    "merged_count": 27
   },
-  "flights": [],
-  "total_results": 0
+  "flights": [
+    {
+      "flight_number": "AA28",
+      "departure_time": "12:15 AM",
+      "arrival_time": "8:29 AM",
+      "cash_price_usd": 184.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 12500,
+      "cpp": 1.43
+    },
+    {
+      "flight_number": "AA118",
+      "departure_time": "6:05 AM",
+      "arrival_time": "2:10 PM",
+      "cash_price_usd": 159.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.02
+    },
+    {
+      "flight_number": "AA2",
+      "departure_time": "7:00 AM",
+      "arrival_time": "3:32 PM",
+      "cash_price_usd": 209.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 20500,
+      "cpp": 0.99
+    },
+    {
+      "flight_number": "AA307",
+      "departure_time": "8:00 AM",
+      "arrival_time": "4:28 PM",
+      "cash_price_usd": 249.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 27000,
+      "cpp": 0.9
+    },
+    {
+      "flight_number": "AA238",
+      "departure_time": "10:15 AM",
+      "arrival_time": "6:42 PM",
+      "cash_price_usd": 319.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 27500,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA32",
+      "departure_time": "11:20 AM",
+      "arrival_time": "7:45 PM",
+      "cash_price_usd": 249.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 24500,
+      "cpp": 0.99
+    },
+    {
+      "flight_number": "AA274",
+      "departure_time": "12:37 PM",
+      "arrival_time": "9:00 PM",
+      "cash_price_usd": 319.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 27500,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA4",
+      "departure_time": "3:40 PM",
+      "arrival_time": "11:49 PM",
+      "cash_price_usd": 114.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 0.72
+    },
+    {
+      "flight_number": "AA10",
+      "departure_time": "9:45 PM",
+      "arrival_time": "6:00 AM",
+      "cash_price_usd": 184.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 19500,
+      "cpp": 0.91
+    },
+    {
+      "flight_number": "AA1956",
+      "departure_time": "12:45 AM",
+      "arrival_time": "11:37 AM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA1021",
+      "departure_time": "6:00 AM",
+      "arrival_time": "7:29 PM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA2808",
+      "departure_time": "6:06 AM",
+      "arrival_time": "7:00 PM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA2068",
+      "departure_time": "6:08 AM",
+      "arrival_time": "5:15 PM",
+      "cash_price_usd": 219.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.42
+    },
+    {
+      "flight_number": "AA12",
+      "departure_time": "9:00 AM",
+      "arrival_time": "8:57 PM",
+      "cash_price_usd": 259.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 25000,
+      "cpp": 1.01
+    },
+    {
+      "flight_number": "AA3175",
+      "departure_time": "9:20 AM",
+      "arrival_time": "8:29 PM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA2630",
+      "departure_time": "9:40 AM",
+      "arrival_time": "7:45 PM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA6371",
+      "departure_time": "5:03 PM",
+      "arrival_time": "7:00 AM",
+      "cash_price_usd": 195.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 19500,
+      "cpp": 0.97
+    },
+    {
+      "flight_number": "AA3176",
+      "departure_time": "6:50 PM",
+      "arrival_time": "7:00 AM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA6260",
+      "departure_time": "8:00 PM",
+      "arrival_time": "7:00 AM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA820",
+      "departure_time": "10:37 PM",
+      "arrival_time": "10:00 AM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA2453",
+      "departure_time": "10:49 PM",
+      "arrival_time": "1:29 PM",
+      "cash_price_usd": 192.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15500,
+      "cpp": 1.2
+    },
+    {
+      "flight_number": "AA2715",
+      "departure_time": "11:59 PM",
+      "arrival_time": "11:28 AM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "AA28",
+      "departure_time": "12:15 AM",
+      "arrival_time": "8:29 AM",
+      "cash_price_usd": 114.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 18000,
+      "cpp": 0.6
+    },
+    {
+      "flight_number": "AM1",
+      "departure_time": "9:00 AM",
+      "arrival_time": "9:00 AM",
+      "cash_price_usd": 259.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 25000,
+      "cpp": 1.01
+    },
+    {
+      "flight_number": "AA276",
+      "departure_time": "5:03 PM",
+      "arrival_time": "5:03 PM",
+      "cash_price_usd": 195.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 19500,
+      "cpp": 0.97
+    },
+    {
+      "flight_number": "AA276",
+      "departure_time": "8:00 PM",
+      "arrival_time": "8:00 PM",
+      "cash_price_usd": 177.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15000,
+      "cpp": 1.14
+    },
+    {
+      "flight_number": "PM1",
+      "departure_time": "10:49 PM",
+      "arrival_time": "10:49 PM",
+      "cash_price_usd": 192.0,
+      "taxes_fees_usd": 5.6,
+      "points_required": 15500,
+      "cpp": 1.2
+    }
+  ],
+  "total_results": 27
 }

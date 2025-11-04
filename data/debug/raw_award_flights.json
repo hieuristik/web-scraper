@@ -1,65 +1,709 @@
 [
   {
-    "arrival_time": "8:29 AM",
-    "departure_time": "12:15 AM",
     "flight_number": "AA28",
-    "miles": 18000,
-    "price": 5.6
+    "departure_time": "12:15 AM",
+    "arrival_time": "8:29 AM",
+    "price": 5.6,
+    "miles": 12500
   },
   {
-    "arrival_time": "2:10 PM",
-    "departure_time": "6:05 AM",
+    "flight_number": "AA28",
+    "departure_time": "12:15 AM",
+    "arrival_time": "8:29 AM",
+    "price": 5.6,
+    "miles": 18000
+  },
+  {
+    "flight_number": "AM1",
+    "departure_time": "9:00 AM",
+    "arrival_time": "9:00 AM",
+    "price": 5.6,
+    "miles": 25000
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "1:29 PM",
+    "arrival_time": "1:29 PM",
+    "price": 11.2,
+    "miles": 21000
+  },
+  {
+    "flight_number": "PM1",
+    "departure_time": "1:50 PM",
+    "arrival_time": "1:50 PM",
+    "price": 11.2,
+    "miles": 19500
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "3:59 PM",
+    "arrival_time": "3:59 PM",
+    "price": 11.2,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "5:03 PM",
+    "arrival_time": "5:03 PM",
+    "price": 11.2,
+    "miles": 19500
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "5:26 PM",
+    "arrival_time": "5:26 PM",
+    "price": 5.6,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "6:49 PM",
+    "arrival_time": "6:49 PM",
+    "price": 5.6,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "8:00 PM",
+    "arrival_time": "8:00 PM",
+    "price": 5.6,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA276",
+    "departure_time": "8:18 PM",
+    "arrival_time": "8:18 PM",
+    "price": 5.6,
+    "miles": 12500
+  },
+  {
+    "flight_number": "PM1",
+    "departure_time": "8:18 PM",
+    "arrival_time": "8:18 PM",
+    "price": 5.6,
+    "miles": 32000
+  },
+  {
+    "flight_number": "AA234",
+    "departure_time": "10:27 PM",
+    "arrival_time": "10:27 PM",
+    "price": 11.2,
+    "miles": 12500
+  },
+  {
+    "flight_number": "PM1",
+    "departure_time": "10:49 PM",
+    "arrival_time": "10:49 PM",
+    "price": 11.2,
+    "miles": 15500
+  },
+  {
+    "flight_number": "AA28",
+    "departure_time": "12:15 AM",
+    "arrival_time": "8:29 AM",
+    "price": null,
+    "miles": 18000
+  },
+  {
+    "flight_number": "AA28",
+    "departure_time": "12:15 AM",
+    "arrival_time": "8:29 AM",
+    "price": null,
+    "miles": 160000
+  },
+  {
+    "flight_number": "AA28",
+    "departure_time": "12:15 AM",
+    "arrival_time": "8:29 AM",
+    "price": null,
+    "miles": 172500
+  },
+  {
     "flight_number": "AA118",
-    "miles": 15000,
-    "price": 5.6
+    "departure_time": "6:05 AM",
+    "arrival_time": "2:10 PM",
+    "price": null,
+    "miles": 15000
   },
   {
-    "arrival_time": "3:32 PM",
-    "departure_time": "7:00 AM",
+    "flight_number": "AA118",
+    "departure_time": "6:05 AM",
+    "arrival_time": "2:10 PM",
+    "price": null,
+    "miles": 40500
+  },
+  {
+    "flight_number": "AA118",
+    "departure_time": "6:05 AM",
+    "arrival_time": "2:10 PM",
+    "price": null,
+    "miles": 178500
+  },
+  {
     "flight_number": "AA2",
-    "miles": 18000,
-    "price": 5.6
+    "departure_time": "7:00 AM",
+    "arrival_time": "3:32 PM",
+    "price": null,
+    "miles": 20500
   },
   {
-    "arrival_time": "4:28 PM",
-    "departure_time": "8:00 AM",
+    "flight_number": "AA2",
+    "departure_time": "7:00 AM",
+    "arrival_time": "3:32 PM",
+    "price": null,
+    "miles": 160000
+  },
+  {
+    "flight_number": "AA2",
+    "departure_time": "7:00 AM",
+    "arrival_time": "3:32 PM",
+    "price": null,
+    "miles": 242000
+  },
+  {
     "flight_number": "AA307",
-    "miles": 27000,
-    "price": 5.6
+    "departure_time": "8:00 AM",
+    "arrival_time": "4:28 PM",
+    "price": null,
+    "miles": 27000
   },
   {
-    "arrival_time": "6:42 PM",
-    "departure_time": "10:15 AM",
+    "flight_number": "AA307",
+    "departure_time": "8:00 AM",
+    "arrival_time": "4:28 PM",
+    "price": null,
+    "miles": 178500
+  },
+  {
+    "flight_number": "AA307",
+    "departure_time": "8:00 AM",
+    "arrival_time": "4:28 PM",
+    "price": null,
+    "miles": 242000
+  },
+  {
     "flight_number": "AA238",
-    "miles": 27500,
-    "price": 5.6
+    "departure_time": "10:15 AM",
+    "arrival_time": "6:42 PM",
+    "price": null,
+    "miles": 27500
   },
   {
-    "arrival_time": "7:45 PM",
-    "departure_time": "11:20 AM",
+    "flight_number": "AA238",
+    "departure_time": "10:15 AM",
+    "arrival_time": "6:42 PM",
+    "price": null,
+    "miles": 200000
+  },
+  {
+    "flight_number": "AA238",
+    "departure_time": "10:15 AM",
+    "arrival_time": "6:42 PM",
+    "price": null,
+    "miles": 250000
+  },
+  {
     "flight_number": "AA32",
-    "miles": 26000,
-    "price": 5.6
+    "departure_time": "11:20 AM",
+    "arrival_time": "7:45 PM",
+    "price": null,
+    "miles": 24500
   },
   {
-    "arrival_time": "9:00 PM",
-    "departure_time": "12:37 PM",
+    "flight_number": "AA32",
+    "departure_time": "11:20 AM",
+    "arrival_time": "7:45 PM",
+    "price": null,
+    "miles": 200000
+  },
+  {
+    "flight_number": "AA32",
+    "departure_time": "11:20 AM",
+    "arrival_time": "7:45 PM",
+    "price": null,
+    "miles": 250000
+  },
+  {
     "flight_number": "AA274",
-    "miles": 27500,
-    "price": 5.6
+    "departure_time": "12:37 PM",
+    "arrival_time": "9:00 PM",
+    "price": null,
+    "miles": 27500
   },
   {
-    "arrival_time": "11:49 PM",
-    "departure_time": "3:40 PM",
+    "flight_number": "AA274",
+    "departure_time": "12:37 PM",
+    "arrival_time": "9:00 PM",
+    "price": null,
+    "miles": 200000
+  },
+  {
+    "flight_number": "AA274",
+    "departure_time": "12:37 PM",
+    "arrival_time": "9:00 PM",
+    "price": null,
+    "miles": 242000
+  },
+  {
     "flight_number": "AA4",
-    "miles": 15000,
-    "price": 5.6
+    "departure_time": "3:40 PM",
+    "arrival_time": "11:49 PM",
+    "price": null,
+    "miles": 15000
   },
   {
-    "arrival_time": "6:00 AM",
-    "departure_time": "9:45 PM",
+    "flight_number": "AA4",
+    "departure_time": "3:40 PM",
+    "arrival_time": "11:49 PM",
+    "price": null,
+    "miles": 40500
+  },
+  {
+    "flight_number": "AA4",
+    "departure_time": "3:40 PM",
+    "arrival_time": "11:49 PM",
+    "price": null,
+    "miles": 127000
+  },
+  {
     "flight_number": "AA10",
-    "miles": 19500,
-    "price": 5.6
+    "departure_time": "9:45 PM",
+    "arrival_time": "6:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 19500
+  },
+  {
+    "flight_number": "AA10",
+    "departure_time": "9:45 PM",
+    "arrival_time": "6:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 132000
+  },
+  {
+    "flight_number": "AA10",
+    "departure_time": "9:45 PM",
+    "arrival_time": "6:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 144500
+  },
+  {
+    "flight_number": "AA1956",
+    "departure_time": "12:45 AM",
+    "arrival_time": "11:37 AM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA1956",
+    "departure_time": "12:45 AM",
+    "arrival_time": "11:37 AM",
+    "price": null,
+    "miles": 97500
+  },
+  {
+    "flight_number": "AA1021",
+    "departure_time": "6:00 AM",
+    "arrival_time": "7:29 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA1021",
+    "departure_time": "6:00 AM",
+    "arrival_time": "7:29 PM",
+    "price": null,
+    "miles": 77000
+  },
+  {
+    "flight_number": "AA2129",
+    "departure_time": "6:00 AM",
+    "arrival_time": "7:29 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2129",
+    "departure_time": "6:00 AM",
+    "arrival_time": "7:29 PM",
+    "price": null,
+    "miles": 76500
+  },
+  {
+    "flight_number": "AA2808",
+    "departure_time": "6:06 AM",
+    "arrival_time": "7:00 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2808",
+    "departure_time": "6:06 AM",
+    "arrival_time": "7:00 PM",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA2068",
+    "departure_time": "6:08 AM",
+    "arrival_time": "9:30 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2068",
+    "departure_time": "6:08 AM",
+    "arrival_time": "9:30 PM",
+    "price": null,
+    "miles": 114000
+  },
+  {
+    "flight_number": "AA2050",
+    "departure_time": "7:00 AM",
+    "arrival_time": "7:29 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2050",
+    "departure_time": "7:00 AM",
+    "arrival_time": "7:29 PM",
+    "price": null,
+    "miles": 153500
+  },
+  {
+    "flight_number": "AA2050",
+    "departure_time": "7:00 AM",
+    "arrival_time": "9:05 PM",
+    "price": null,
+    "miles": 200000
+  },
+  {
+    "flight_number": "AA2746",
+    "departure_time": "7:00 AM",
+    "arrival_time": "9:30 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2746",
+    "departure_time": "7:00 AM",
+    "arrival_time": "9:30 PM",
+    "price": null,
+    "miles": 174000
+  },
+  {
+    "flight_number": "AA12",
+    "departure_time": "9:00 AM",
+    "arrival_time": "8:57 PM",
+    "price": null,
+    "miles": 25000
+  },
+  {
+    "flight_number": "AA12",
+    "departure_time": "9:00 AM",
+    "arrival_time": "8:57 PM",
+    "price": null,
+    "miles": 41000
+  },
+  {
+    "flight_number": "AA12",
+    "departure_time": "9:00 AM",
+    "arrival_time": "8:57 PM",
+    "price": null,
+    "miles": 53500
+  },
+  {
+    "flight_number": "AA3175",
+    "departure_time": "9:20 AM",
+    "arrival_time": "8:29 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA3175",
+    "departure_time": "9:20 AM",
+    "arrival_time": "8:29 PM",
+    "price": null,
+    "miles": 134000
+  },
+  {
+    "flight_number": "AA2630",
+    "departure_time": "9:40 AM",
+    "arrival_time": "7:45 PM",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2630",
+    "departure_time": "9:40 AM",
+    "arrival_time": "7:45 PM",
+    "price": null,
+    "miles": 167500
+  },
+  {
+    "flight_number": "AA6324",
+    "departure_time": "1:29 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 21000
+  },
+  {
+    "flight_number": "AA6324",
+    "departure_time": "1:29 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA6324",
+    "departure_time": "1:29 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 52500
+  },
+  {
+    "flight_number": "AA382",
+    "departure_time": "1:50 PM",
+    "arrival_time": "7:29 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 19500
+  },
+  {
+    "flight_number": "AA382",
+    "departure_time": "1:50 PM",
+    "arrival_time": "7:29 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA382",
+    "departure_time": "1:50 PM",
+    "arrival_time": "7:29 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 52500
+  },
+  {
+    "flight_number": "AS3433",
+    "departure_time": "3:59 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AS3433",
+    "departure_time": "3:59 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 32500
+  },
+  {
+    "flight_number": "AA6371",
+    "departure_time": "5:03 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 19500
+  },
+  {
+    "flight_number": "AA6371",
+    "departure_time": "5:03 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA6371",
+    "departure_time": "5:03 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 52500
+  },
+  {
+    "flight_number": "AS2477",
+    "departure_time": "5:26 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AS2477",
+    "departure_time": "5:26 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 32500
+  },
+  {
+    "flight_number": "AS2150",
+    "departure_time": "6:49 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AS2150",
+    "departure_time": "6:49 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 32500
+  },
+  {
+    "flight_number": "AA3176",
+    "departure_time": "6:50 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA3176",
+    "departure_time": "6:50 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA3176",
+    "departure_time": "6:50 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 52500
+  },
+  {
+    "flight_number": "AA6260",
+    "departure_time": "8:00 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA6260",
+    "departure_time": "8:00 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA6260",
+    "departure_time": "8:00 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 52500
+  },
+  {
+    "flight_number": "AS2482",
+    "departure_time": "8:18 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AS2482",
+    "departure_time": "8:18 PM",
+    "arrival_time": "7:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 32500
+  },
+  {
+    "flight_number": "AS2482",
+    "departure_time": "8:18 PM",
+    "arrival_time": "7:30 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 32000
+  },
+  {
+    "flight_number": "AS2482",
+    "departure_time": "8:18 PM",
+    "arrival_time": "7:30 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 25000
+  },
+  {
+    "flight_number": "AA1729",
+    "departure_time": "9:30 PM",
+    "arrival_time": "10:30 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA1729",
+    "departure_time": "9:30 PM",
+    "arrival_time": "10:30 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 83500
+  },
+  {
+    "flight_number": "AA1729",
+    "departure_time": "9:30 PM",
+    "arrival_time": "11:35 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 46500
+  },
+  {
+    "flight_number": "AS3461",
+    "departure_time": "10:27 PM",
+    "arrival_time": "3:54 PM  , Arrives on December 16",
+    "price": null,
+    "miles": 12500
+  },
+  {
+    "flight_number": "AA820",
+    "departure_time": "10:37 PM",
+    "arrival_time": "10:00 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2453",
+    "departure_time": "10:49 PM",
+    "arrival_time": "1:29 PM  , Arrives on December 16",
+    "price": null,
+    "miles": 15500
+  },
+  {
+    "flight_number": "AA2453",
+    "departure_time": "10:49 PM",
+    "arrival_time": "1:29 PM  , Arrives on December 16",
+    "price": null,
+    "miles": 40000
+  },
+  {
+    "flight_number": "AA2453",
+    "departure_time": "10:49 PM",
+    "arrival_time": "1:29 PM  , Arrives on December 16",
+    "price": null,
+    "miles": 250000
+  },
+  {
+    "flight_number": "AA2729",
+    "departure_time": "10:59 PM",
+    "arrival_time": "10:30 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2729",
+    "departure_time": "10:59 PM",
+    "arrival_time": "10:30 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 99500
+  },
+  {
+    "flight_number": "AA2729",
+    "departure_time": "10:59 PM",
+    "arrival_time": "11:35 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 63000
+  },
+  {
+    "flight_number": "AA2715",
+    "departure_time": "11:59 PM",
+    "arrival_time": "11:28 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 15000
+  },
+  {
+    "flight_number": "AA2715",
+    "departure_time": "11:59 PM",
+    "arrival_time": "11:28 AM  , Arrives on December 16",
+    "price": null,
+    "miles": 85000
   }
 ]
