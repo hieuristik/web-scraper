@@ -125,3 +125,35 @@ def _find_first(parent, selectors: List[str]):
         except Exception:
             continue
     return None
+
+# New helper: convert 12-hour "H:MM AM/PM" style times to 24-hour "HH:MM"
+def convert_to_24h_time(time_str: Optional[str]) -> Optional[str]:
+    """
+    Convert a time string like "6:05 AM", "12:45 AM", "10:49 PM" to 24-hour "HH:MM".
+    Returns the converted string, or None if conversion wasn't possible.
+    This function is forgiving: it will search for an AM/PM time inside the input,
+    strip any trailing +N markers or parentheses (but expects those are removed earlier).
+    """
+    if not time_str:
+        return None
+    s = time_str.strip()
+    # find the first HH:MM + AM/PM occurrence
+    m = re.search(r'(\d{1,2}):(\d{2})\s*([AP]M)', s, re.IGNORECASE)
+    if not m:
+        # maybe it's already 24-hour like "08:00" — validate it
+        m2 = re.match(r'^([01]?\d|2[0-3]):([0-5]\d)$', s)
+        if m2:
+            hh = int(m2.group(1))
+            mm = int(m2.group(2))
+            return f"{hh:02d}:{mm:02d}"
+        return None
+    hour = int(m.group(1))
+    minute = int(m.group(2))
+    ampm = m.group(3).upper()
+    if ampm == "AM":
+        if hour == 12:
+            hour = 0
+    else:  # PM
+        if hour != 12:
+            hour += 12
+    return f"{hour:02d}:{minute:02d}"
