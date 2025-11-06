@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  aa-scraper:
+    build: .
+    image: aa-scraper:local
+    # Mount local data folders so container writes appear on host
+    volumes:
+      - ./data/processed:/app/data/processed
+      - ./data/debug:/app/data/debug
+    # Example: run the scraper once with args - override the container entrypoint with the CLI args
+    command: ["--origin", "LAX", "--destination", "JFK", "--date", "2025-12-15"]
+    # Example environment variables useful for demo/testing (override locally as needed)
+    environment:
+      - CHROME_PATH=/usr/bin/chromium
+      - DEMO_MAX_CPP=5.0
+      # - DEMO_CARRIER=AA    # uncomment to restrict to AA-marketed flights in demo
+    shm_size: 1g

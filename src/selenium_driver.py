@@ -3,6 +3,7 @@ import sys
 import types
 import time
 import re
+import os
 from typing import List, Dict
 # distutils shim for py3.12 missing distutils
 try:
@@ -37,6 +38,25 @@ except Exception as e:
 from .utils import _save_html, _dump, _strip_plus_day_suffix, mmddyyyy
 from .parse_structured import parse_cash_flights_structured, parse_award_flights_structured
 
+# optional debug helper (saves full rendered DOM + screenshot + extras)
+try:
+    from .selenium_debug_helpers import save_full_page
+except Exception:
+    save_full_page = None  # best-effort import; code will fallback to _save_html if not available
+
+def running_in_docker() -> bool:
+    """Simple container detection used to tune Chrome flags for Docker."""
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", "rt") as f:
+            c = f.read()
+            if any(k in c for k in ("docker", "kubepods", "containerd")):
+                return True
+    except Exception:
+        pass
+    return False
+
 class AAScraper:
     def __init__(self):
         self.driver = None
@@ -44,16 +64,65 @@ class AAScraper:
     def setup(self):
         print("🚀 Launching Chrome...")
         opts = uc.ChromeOptions()
+        # common helpful args
         opts.add_argument('--disable-blink-features=AutomationControlled')
         opts.add_argument('--no-sandbox')
         opts.add_argument('--disable-dev-shm-usage')
         opts.add_argument("--window-size=1400,1000")
         opts.add_argument("--lang=en-US,en")
+
+        # allow overriding UA inside Docker for troubleshooting: DOCKER_UA env
+        ua = os.environ.get("DOCKER_UA")
+        if ua:
+            try:
+                opts.add_argument(f"user-agent={ua}")
+            except Exception:
+                pass
+
+        # If CHROME_PATH is provided (container), prefer that binary explicitly
+        chrome_path = os.environ.get("CHROME_PATH")
+        if chrome_path:
+            try:
+                # prefer explicit binary location so uc launches provided chromium
+                opts.binary_location = chrome_path
+            except Exception:
+                pass
+
+        # If running in docker, be more conservative with flags
+        if running_in_docker():
+            # use new headless mode if available (safer in many modern images)
+            try:
+                opts.add_argument('--headless=new')
+            except Exception:
+                try:
+                    opts.add_argument('--headless')
+                except Exception:
+                    pass
+            # container-friendly flags (some images need setuid sandbox disabled)
+            opts.add_argument('--disable-setuid-sandbox')
+            opts.add_argument('--disable-gpu')
+
         try:
             self.driver = uc.Chrome(options=opts)
             print("✓ Chrome ready")
         except Exception as e:
-            raise RuntimeError(f"Failed to start Chrome: {e}")
+            # Helpful debug output to save to debug log and to stdout for the container logs
+            hint = {
+                "error": str(e),
+                "chrome_path_env": chrome_path,
+                "docker_user_agent": ua,
+                "running_in_docker": running_in_docker()
+            }
+            try:
+                _dump(hint, "chrome_launch_error")
+            except Exception:
+                pass
+            # Provide actionable message in the exception so logs point to likely causes
+            raise RuntimeError(
+                "Failed to start Chrome inside container. See data/debug/chrome_launch_error.json for details. "
+                "Common causes: CHROME_PATH not installed in image, missing --no-sandbox/--disable-dev-shm-usage, "
+                "or Chrome crashed due to sandboxing. Inner error: " + str(e)
+            )
 
     def _dismiss_popups(self):
         try:
@@ -72,7 +141,17 @@ class AAScraper:
         self.driver.get("https://www.aa.com/")
         time.sleep(3.0)
         self._dismiss_popups()
-        _save_html(self.driver, "home")
+        # keep original _save_html as a fallback; prefer save_full_page if available
+        try:
+            if save_full_page:
+                save_full_page(self.driver, "home")
+            else:
+                _save_html(self.driver, "home")
+        except Exception:
+            try:
+                _save_html(self.driver, "home")
+            except Exception:
+                pass
         print("✓ Homepage loaded")
 
     def fill_search_form(self, origin: str, dest: str, date: str, redeem_miles: bool):
@@ -234,7 +313,18 @@ class AAScraper:
         return False
 
     def parse_flights_structured(self, is_award: bool) -> List[Dict]:
-        _save_html(self.driver, f"{'award' if is_award else 'cash'}_results")
+        # Save full rendered DOM + screenshot if helper is available; fall back to prior _save_html
+        try:
+            if save_full_page:
+                save_full_page(self.driver, f"{'award' if is_award else 'cash'}_results")
+            else:
+                _save_html(self.driver, f"{'award' if is_award else 'cash'}_results")
+        except Exception:
+            try:
+                _save_html(self.driver, f"{'award' if is_award else 'cash'}_results")
+            except Exception:
+                pass
+
         if is_award:
             return parse_award_flights_structured(self.driver)
         else:
